@@ -1,4 +1,5 @@
 #include <uWS.h>
+#include <deque>
 #include <unordered_map>
 #include <map>
 #include <functional>
@@ -6,14 +7,9 @@
 #include "json.hpp"
 #include <sys/time.h>
 
-template <typename I> std::string n2hexstr(I w, size_t hex_len = sizeof(I)<<1) {
-    static const char* digits = "0123456789ABCDEF";
-    std::string rc(hex_len,'0');
-    for (size_t i=0, j=(hex_len-1)*4 ; i<hex_len; ++i,j-=4)
-        rc[i] = digits[(w>>j) & 0x0f];
-    return rc;
-}
-
+/* id, connections (multiple tabs),
+ * and mouse x & y of the client in a room.
+ ***/
 struct clinfo_t {
 	std::set<uWS::WebSocket> sockets;
 	std::string id;
@@ -35,42 +31,65 @@ public:
 		std::string name;
 		std::string _id;
 	public:
-		Client(std::string n_id){name="Anonymoose"; color=0xFF0000FF; _id=n_id;};
+		Client(std::string n_id, uint32_t clr){name="Anonymoose"; color=clr; _id=n_id;};
 		nlohmann::json get_json();
 		void set_name(std::string n){name=n;};
-		/*void set_color(uint32_t); /* related to this client */
+		/*void set_color(uint32_t); */
 	};
 	class Room {
-		/* Client pointer and it's id */
+		struct oinfo_t {
+			Client* owner;
+			std::array<float,2> startpos;
+			std::array<float,2> endpos;
+			long int time;
+		};
 		bool lobby, visible, chat, crownsolo;
 		uint32_t color;
+		oinfo_t crown;
 		std::unordered_map<Client*, clinfo_t> ids;
+		std::deque<nlohmann::json> chatlog;
 	public:
-		Room(){color=0x7E0404FF; lobby=false; visible=true; chat=true; crownsolo=false;};
-		nlohmann::json get_json(std::string);
-		std::string join_usr(uWS::WebSocket, mppconn_t&, std::string);
-		bool kick_usr(uWS::WebSocket, mppconn_t&);
-		/*void set_param(void){};*/
+		Room(bool lby){
+			lobby = lby;
+			color = 0x242464;
+			visible = true;
+			chat = true;
+			crownsolo = false;
+		};
+		nlohmann::json get_json(std::string, bool);
+		nlohmann::json get_chatlog_json();
+		void push_chat(nlohmann::json);
+		clinfo_t* get_info(Client*);
+		Client* get_client(std::string);
+		bool is_lobby(){return lobby;};
+		bool chat_on(){return chat;};
+		bool is_crownsolo(){return crownsolo;};
+		bool is_owner(Client* c){return c == crown.owner;};
+		std::string join_usr(uWS::WebSocket&, mppconn_t&, std::string);
+		void broadcast(nlohmann::json, uWS::WebSocket&);
+		bool kick_usr(uWS::WebSocket&, mppconn_t&, std::string);
+		void set_param(nlohmann::json, std::string);
+		void set_owner(Client*);
+		void part_upd(Client*);
 	};
 	class msg {
 	public:
-		static nlohmann::json n(server*, nlohmann::json, uWS::WebSocket);
-		static nlohmann::json a(server*, nlohmann::json, uWS::WebSocket);
-		static nlohmann::json m(server*, nlohmann::json, uWS::WebSocket);
-		static nlohmann::json t(server*, nlohmann::json, uWS::WebSocket);
-		static nlohmann::json ch(server*, nlohmann::json, uWS::WebSocket);
+		static void n(server*, nlohmann::json, uWS::WebSocket&);
+		static void a(server*, nlohmann::json, uWS::WebSocket&);
+		static void m(server*, nlohmann::json, uWS::WebSocket&);
+		static void t(server*, nlohmann::json, uWS::WebSocket&);
+		static void ch(server*, nlohmann::json, uWS::WebSocket&);
 		
-		static nlohmann::json hi(server*, nlohmann::json, uWS::WebSocket);
-		static nlohmann::json bye(server*, nlohmann::json, uWS::WebSocket);
+		static void hi(server*, nlohmann::json, uWS::WebSocket&);
 		
-		static nlohmann::json chown(server*, nlohmann::json, uWS::WebSocket);
-		static nlohmann::json chset(server*, nlohmann::json, uWS::WebSocket);
-		static nlohmann::json userset(server*, nlohmann::json, uWS::WebSocket);
+		static void chown(server*, nlohmann::json, uWS::WebSocket&);
+		static void chset(server*, nlohmann::json, uWS::WebSocket&);
+		static void userset(server*, nlohmann::json, uWS::WebSocket&);
 		
-		static nlohmann::json kickban(server*, nlohmann::json, uWS::WebSocket);
+		static void kickban(server*, nlohmann::json, uWS::WebSocket&);
 		
-		static nlohmann::json lsl(server*, nlohmann::json, uWS::WebSocket); /* -ls */
-		static nlohmann::json lsp(server*, nlohmann::json, uWS::WebSocket); /* +ls */
+		static void lsl(server*, nlohmann::json, uWS::WebSocket&); /* -ls */
+		static void lsp(server*, nlohmann::json, uWS::WebSocket&); /* +ls */
 	};
 	server(uint16_t p){
 		funcmap = {
@@ -80,7 +99,6 @@ public:
 			{"t", std::bind(msg::t, this, std::placeholders::_1, std::placeholders::_2)},
 			{"ch", std::bind(msg::ch, this, std::placeholders::_1, std::placeholders::_2)},
 			{"hi", std::bind(msg::hi, this, std::placeholders::_1, std::placeholders::_2)},
-			{"bye", std::bind(msg::bye, this, std::placeholders::_1, std::placeholders::_2)},
 			{"chown", std::bind(msg::chown, this, std::placeholders::_1, std::placeholders::_2)},
 			{"chset", std::bind(msg::chset, this, std::placeholders::_1, std::placeholders::_2)},
 			{"userset", std::bind(msg::userset, this, std::placeholders::_1, std::placeholders::_2)},
@@ -92,12 +110,16 @@ public:
 	}
 	void run();
 	void reg_evts(uWS::Server &s);
-	void parse_msg(nlohmann::json &msg, uWS::WebSocket socket);
-	std::string set_room(std::string, uWS::WebSocket, mppconn_t&);
-	nlohmann::json genusr(uWS::WebSocket);
+	void parse_msg(nlohmann::json &msg, uWS::WebSocket& socket);
+	std::string set_room(std::string, uWS::WebSocket&, mppconn_t&, nlohmann::json);
+	void user_upd(std::string);
+	void rooml_upd(Room*, std::string);
+	nlohmann::json get_roomlist();
+	nlohmann::json genusr(uWS::WebSocket&);
 private:
 	uint16_t port;
 	std::unordered_map<std::string, mppconn_t> clients;
 	std::unordered_map<std::string, Room*> rooms;
-	std::map<std::string, std::function<nlohmann::json(nlohmann::json,uWS::WebSocket)>> funcmap;
+	std::set<uWS::WebSocket> roomlist_watchers;
+	std::map<std::string, std::function<void(nlohmann::json,uWS::WebSocket&)>> funcmap;
 };

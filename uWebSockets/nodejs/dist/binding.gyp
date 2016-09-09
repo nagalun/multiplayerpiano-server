@@ -9,6 +9,7 @@
         'src/Server.cpp',
         'src/UTF8.cpp',
         'src/WebSocket.cpp',
+        'src/EventSystem.cpp',
         'src/addon.cpp'
       ],
       'conditions': [
@@ -34,10 +35,7 @@
         }],
         ['OS=="win"', {
           'cflags_cc': [],
-          'cflags_cc!': [],
-          'defines': [
-            'NODEJS_WINDOWS'
-          ]
+          'cflags_cc!': []
         }]
        ]
     },

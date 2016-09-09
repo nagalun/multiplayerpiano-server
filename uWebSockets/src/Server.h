@@ -10,6 +10,7 @@
 #include <zlib.h>
 
 #include "WebSocket.h"
+#include "EventSystem.h"
 
 namespace uWS {
 
@@ -27,7 +28,7 @@ enum Options : unsigned int {
     NO_DELAY = 8
 };
 
-class SSLContext {
+class WIN32_EXPORT SSLContext {
 private:
     SSL_CTX *sslContext = nullptr;
 public:
@@ -41,7 +42,7 @@ public:
     void *newSSL(int fd);
 };
 
-class Server
+class WIN32_EXPORT Server
 {
     friend class HTTPSocket;
     friend class WebSocket;
@@ -54,13 +55,14 @@ private:
     bool master, forceClose;
     unsigned int options, maxPayload;
     SSLContext sslContext;
+    EventSystem &es;
     static void acceptHandler(uv_poll_t *p, int status, int events);
     static void upgradeHandler(Server *server);
     static void closeHandler(Server *server);
 
     char *recvBuffer, *sendBuffer, *inflateBuffer, *upgradeBuffer;
-    static const int LARGE_BUFFER_SIZE = 307200,
-                     SHORT_BUFFER_SIZE = 4096;
+    static const int LARGE_BUFFER_SIZE = 307200;
+    static const int SHORT_BUFFER_SIZE = 4096;
 
     struct WebSocketIterator {
         WebSocket webSocket;
@@ -99,7 +101,7 @@ private:
     std::function<void(WebSocket, char *, size_t)> pingCallback;
     std::function<void(WebSocket, char *, size_t)> pongCallback;
 public:
-    Server(int port = 0, bool master = true, unsigned int options = 0, unsigned int maxPayload = 1048576, SSLContext sslContext = SSLContext());
+    Server(EventSystem &es, int port = 0, unsigned int options = 0, unsigned int maxPayload = 1048576, SSLContext sslContext = SSLContext());
     ~Server();
     Server(const Server &server) = delete;
     Server &operator=(const Server &server) = delete;
@@ -111,7 +113,6 @@ public:
     void onPong(std::function<void(WebSocket, char *, size_t)> pongCallback);
     void close(bool force = false);
     void upgrade(uv_os_sock_t fd, const char *secKey, void *ssl = nullptr, const char *extensions = nullptr, size_t extensionsLength = 0);
-    void run();
     size_t compress(char *src, size_t srcLength, char *dst);
     void broadcast(char *data, size_t length, OpCode opCode);
 
