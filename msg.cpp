@@ -53,8 +53,8 @@ void server::msg::a(server* sv, json j, uWS::WebSocket& s){
 void server::msg::m(server* sv, json j, uWS::WebSocket& s){
 	/* TODO: fix rounding of floats */
 	auto res = json::array();
-	float x;
-	float y;
+	float x = 0;
+	float y = 0;
 	if(j["x"].is_string() && j["y"].is_string()) try {
 		x = std::stof(j["x"].get<std::string>());
 		y = std::stof(j["y"].get<std::string>());

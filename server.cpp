@@ -194,7 +194,7 @@ bool server::Room::kick_usr(uWS::WebSocket& s, mppconn_t& c, std::string rname){
 	auto ssearch = ids.find(c.user);
 	if(ssearch != ids.end()){
 		if(ssearch->second.sockets.erase(s) && !ssearch->second.sockets.size()){
-			if(c.user == crown.owner){
+			if(!lobby && c.user == crown.owner){
 				ownupd = true;
 				this->set_owner(NULL);
 			}
@@ -318,20 +318,20 @@ void server::rooml_upd(Room* r, std::string _id){
 
 nlohmann::json server::genusr(uWS::WebSocket& s){
 	std::string ip(s.getAddress().address);
-	unsigned char hash[20];
-	std::string _id(20, '0');
-	SHA1((unsigned char*)ip.c_str(), ip.size(), hash);
-	for(uint8_t i = 10; i--;){
-		_id[2 * i] = hexmap[(hash[i] & 0xF0) >> 4];
-		_id[2 * i + 1] = hexmap[hash[i] & 0x0F];
-	}
-	uint32_t color = (uint32_t)hash[11] << 24 |
-	                 (uint32_t)hash[12] << 16 |
-	                 (uint16_t)hash[13] << 8 |
-	                           hash[14];
-	color += 0x222222; /* colors seem to be pretty dark otherwise */
 	auto search = clients.find(ip);
 	if(search == clients.end()){
+		unsigned char hash[20];
+		std::string _id(20, '0');
+		SHA1((unsigned char*)ip.c_str(), ip.size(), hash);
+		for(uint8_t i = 10; i--;){
+			_id[2 * i] = hexmap[(hash[i] & 0xF0) >> 4];
+			_id[2 * i + 1] = hexmap[hash[i] & 0x0F];
+		}
+		uint32_t color = (uint32_t)hash[11] << 24 |
+		                 (uint32_t)hash[12] << 16 |
+		                 (uint16_t)hash[13] << 8 |
+		                           hash[14];
+		color += 0x222222; /* colors seem to be pretty dark otherwise */
 		std::cout << "New client: " << ip << std::endl;
 		clients[ip] = {new server::Client(_id, color), {{s, ""}}};
 	} else {

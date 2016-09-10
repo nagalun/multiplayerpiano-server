@@ -55,6 +55,7 @@ public:
 			visible = true;
 			chat = true;
 			crownsolo = false;
+			crown = {NULL, {50, 50}, {50, 50}, 0};
 		};
 		nlohmann::json get_json(std::string, bool);
 		nlohmann::json get_chatlog_json();
