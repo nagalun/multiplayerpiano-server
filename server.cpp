@@ -189,7 +189,7 @@ server::Client* server::Room::get_client(std::string id){
 }
 
 bool server::Room::kick_usr(uWS::WebSocket& s, mppconn_t& c, std::string rname){
-	std::string ip(s.getAddress().address);
+	std::string ip = *(std::string *) s.getData();
 	bool ownupd = false;
 	auto ssearch = ids.find(c.user);
 	if(ssearch != ids.end()){
@@ -317,7 +317,7 @@ void server::rooml_upd(Room* r, std::string _id){
 }
 
 nlohmann::json server::genusr(uWS::WebSocket& s){
-	std::string ip(s.getAddress().address);
+	std::string ip = *(std::string *) s.getData();
 	auto search = clients.find(ip);
 	if(search == clients.end()){
 		unsigned char hash[20];
@@ -349,11 +349,11 @@ void server::run(){
 
 void server::reg_evts(uWS::Server &s){
 	s.onConnection([this](uWS::WebSocket socket){
-	
+		socket.setData(new std::string(socket.getAddress().address));
 	});
 	
 	s.onDisconnection([this](uWS::WebSocket socket, int code, const char *message, size_t length){
-		std::string ip(socket.getAddress().address);
+		std::string ip = *(std::string *) socket.getData();
 		roomlist_watchers.erase(socket);
 		auto search = clients.find(ip);
 		if(search != clients.end()){
@@ -373,6 +373,7 @@ void server::reg_evts(uWS::Server &s){
 				clients.erase(ip);
 			}
 		}
+		delete (std::string *)socket.getData();
 	});
 	
 	s.onMessage([this, &s](uWS::WebSocket socket, const char *message, size_t length, uWS::OpCode opCode){

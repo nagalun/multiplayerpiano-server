@@ -8,7 +8,7 @@ long int js_date_now();
 void server::msg::n(server* sv, json j, uWS::WebSocket& s){
 	/* TODO: validate note data before sending */
 	if(j["n"].is_array() && j["t"].is_number()){
-		auto search = sv->clients.find(std::string(s.getAddress().address));
+		auto search = sv->clients.find(*(std::string *) s.getData());
 		if(search != sv->clients.end()){
 			/* this MAY be dangerous? */
 			auto ssearch = sv->rooms.find(search->second.sockets.at(s));
@@ -31,7 +31,7 @@ void server::msg::n(server* sv, json j, uWS::WebSocket& s){
  */
 
 void server::msg::a(server* sv, json j, uWS::WebSocket& s){
-	auto search = sv->clients.find(std::string(s.getAddress().address));
+	auto search = sv->clients.find(*(std::string *) s.getData());
 	if(search != sv->clients.end() &&
 	   j["message"].is_string() &&
 	   j["message"].get<std::string>().size() <= 512){
@@ -64,7 +64,7 @@ void server::msg::m(server* sv, json j, uWS::WebSocket& s){
 		x = j["x"].get<float>();
 		y = j["y"].get<float>();
 	} else { return; }
-	auto search = sv->clients.find(std::string(s.getAddress().address));
+	auto search = sv->clients.find(*(std::string *) s.getData());
 	if(search != sv->clients.end()){
 		auto ssearch = sv->rooms.find(search->second.sockets.at(s));
 		if(ssearch != sv->rooms.end()){
@@ -97,7 +97,7 @@ void server::msg::t(server* sv, json j, uWS::WebSocket& s){
 }
 void server::msg::ch(server* sv, json j, uWS::WebSocket& s){
 	auto res = json::array();
-	auto search = sv->clients.find(std::string(s.getAddress().address));
+	auto search = sv->clients.find(*(std::string *) s.getData());
 	if(j["_id"].is_string() && search != sv->clients.end()){
 		std::string nr = j["_id"].get<std::string>();
 		nlohmann::json set = {};
@@ -129,7 +129,7 @@ void server::msg::ch(server* sv, json j, uWS::WebSocket& s){
 
 void server::msg::hi(server* sv, json j, uWS::WebSocket& s){
 	auto res = json::array();
-	auto search = sv->clients.find(std::string(s.getAddress().address));
+	auto search = sv->clients.find(*(std::string *) s.getData());
 	if(search == sv->clients.end() || search->second.sockets.find(s) == search->second.sockets.end()){
 		res[0] = json::object({
 			{"m", "hi"},
@@ -143,7 +143,7 @@ void server::msg::hi(server* sv, json j, uWS::WebSocket& s){
 
 
 void server::msg::chown(server* sv, json j, uWS::WebSocket& s){
-	auto search = sv->clients.find(std::string(s.getAddress().address));
+	auto search = sv->clients.find(*(std::string *) s.getData());
 	if(search == sv->clients.end()) return;
 	auto ssearch = sv->rooms.find(search->second.sockets.at(s));
 	if(ssearch == sv->rooms.end()) return;
@@ -161,8 +161,7 @@ void server::msg::chown(server* sv, json j, uWS::WebSocket& s){
 }
 
 void server::msg::chset(server* sv, json j, uWS::WebSocket& s){
-	/* TODO: check if owner of the room */
-	auto search = sv->clients.find(std::string(s.getAddress().address));
+	auto search = sv->clients.find(*(std::string *) s.getData());
 	if(search == sv->clients.end()) return;
 	auto ssearch = sv->rooms.find(search->second.sockets.at(s));
 	if(ssearch == sv->rooms.end()) return;
@@ -174,7 +173,7 @@ void server::msg::chset(server* sv, json j, uWS::WebSocket& s){
 
 void server::msg::userset(server* sv, json j, uWS::WebSocket& s){
 	if(j["set"].is_object() && j["set"]["name"].is_string()){
-		std::string ip(s.getAddress().address);
+		std::string ip = *(std::string *) s.getData();
 		auto search = sv->clients.find(ip);
 		if(search != sv->clients.end()){
 			std::string newn = j["set"]["name"].get<std::string>();
@@ -199,7 +198,7 @@ void server::msg::lsl(server* sv, json j, uWS::WebSocket& s){
 }
 
 void server::msg::lsp(server* sv, json j, uWS::WebSocket& s){
-	auto search = sv->clients.find(std::string(s.getAddress().address));
+	auto search = sv->clients.find(*(std::string *) s.getData());
 	if(search == sv->clients.end()) return;
 	json res = json::array();
 	res[0] = {
