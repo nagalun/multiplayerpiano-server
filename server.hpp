@@ -32,10 +32,9 @@ public:
 			uint32_t color;
 			std::string name;
 		};
-		Database(const std::string& dir) : dir(dir){};
+		Database(const std::string& dir) : dir(dir){ mkdir(dir.c_str(), 0700); };
 		pinfo_t get_usrinfo(uint32_t);
 		void set_usrinfo(uint32_t, pinfo_t);
-		std::fstream get_file(uint32_t, bool);
 	};
 	struct mppconn_t {
 		Client* user;
