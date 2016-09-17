@@ -6,12 +6,15 @@
 #include <set>
 #include "json.hpp"
 #include <sys/time.h>
+#include "limiter.hpp"
+#include <fstream>
 
 /* id, connections (multiple tabs),
  * and mouse x & y of the client in a room.
  ***/
 struct clinfo_t {
 	std::set<uWS::WebSocket> sockets;
+	RoomLimit quota;
 	std::string id;
 	float x;
 	float y;
@@ -21,6 +24,19 @@ class server {
 public:
 	class Client;
 	class Room;
+	class Database {
+		std::string dir;
+	public:
+		struct pinfo_t {
+			bool found;
+			uint32_t color;
+			std::string name;
+		};
+		Database(const std::string& dir) : dir(dir){};
+		pinfo_t get_usrinfo(uint32_t);
+		void set_usrinfo(uint32_t, pinfo_t);
+		std::fstream get_file(uint32_t, bool);
+	};
 	struct mppconn_t {
 		Client* user;
 		/* Socket, room */
@@ -31,14 +47,24 @@ public:
 		std::string name;
 		std::string _id;
 	public:
-		Client(std::string n_id, uint32_t clr){name="Anonymoose"; color=clr; _id=n_id;};
+		Client(uint32_t hsh, std::string n_id, uint32_t clr, std::string nme) :
+			color(clr),
+			name(nme),
+			_id(n_id),
+			dhash(hsh),
+			changed(false){};
 		nlohmann::json get_json();
+		Database::pinfo_t get_dbdata();
 		void set_name(std::string n){name=n;};
-		/*void set_color(uint32_t); */
+		void set_color(uint32_t c){color=c;};
+		ClientLimit quota;
+		uint32_t dhash;
+		bool changed;
 	};
 	class Room {
 		struct oinfo_t {
 			Client* owner;
+			Client* oldowner;
 			std::array<float,2> startpos;
 			std::array<float,2> endpos;
 			long int time;
@@ -49,19 +75,19 @@ public:
 		std::unordered_map<Client*, clinfo_t> ids;
 		std::deque<nlohmann::json> chatlog;
 	public:
-		Room(bool lby){
-			lobby = lby;
-			color = 0x242464;
-			visible = true;
-			chat = true;
-			crownsolo = false;
-			crown = {NULL, {50, 50}, {50, 50}, 0};
-		};
+		Room(bool lby) :
+			lobby(lby),
+			visible(true),
+			chat(true),
+			crownsolo(false),
+			color(0x242464),
+			crown({NULL, NULL, {50, 50}, {50, 50}, 0}){};
 		nlohmann::json get_json(std::string, bool);
 		nlohmann::json get_chatlog_json();
 		void push_chat(nlohmann::json);
 		clinfo_t* get_info(Client*);
 		Client* get_client(std::string);
+		oinfo_t get_crowninfo(){return crown;};
 		bool is_lobby(){return lobby;};
 		bool chat_on(){return chat;};
 		bool is_crownsolo(){return crownsolo;};
@@ -87,12 +113,13 @@ public:
 		static void chset(server*, nlohmann::json, uWS::WebSocket&);
 		static void userset(server*, nlohmann::json, uWS::WebSocket&);
 		
+		static void adminmsg(server*, nlohmann::json, uWS::WebSocket&);
 		static void kickban(server*, nlohmann::json, uWS::WebSocket&);
 		
 		static void lsl(server*, nlohmann::json, uWS::WebSocket&); /* -ls */
 		static void lsp(server*, nlohmann::json, uWS::WebSocket&); /* +ls */
 	};
-	server(uint16_t p){
+	server(uint16_t p) : port(p), db("database/"){
 		funcmap = {
 			{"n", std::bind(msg::n, this, std::placeholders::_1, std::placeholders::_2)},
 			{"a", std::bind(msg::a, this, std::placeholders::_1, std::placeholders::_2)},
@@ -103,11 +130,11 @@ public:
 			{"chown", std::bind(msg::chown, this, std::placeholders::_1, std::placeholders::_2)},
 			{"chset", std::bind(msg::chset, this, std::placeholders::_1, std::placeholders::_2)},
 			{"userset", std::bind(msg::userset, this, std::placeholders::_1, std::placeholders::_2)},
+			{"adminmsg", std::bind(msg::adminmsg, this, std::placeholders::_1, std::placeholders::_2)},
 			{"kickban", std::bind(msg::kickban, this, std::placeholders::_1, std::placeholders::_2)},
 			{"-ls", std::bind(msg::lsl, this, std::placeholders::_1, std::placeholders::_2)},
 			{"+ls", std::bind(msg::lsp, this, std::placeholders::_1, std::placeholders::_2)}
 		};
-		port = p;
 	}
 	void run();
 	void reg_evts(uWS::Server &s);
@@ -119,6 +146,7 @@ public:
 	nlohmann::json genusr(uWS::WebSocket&);
 private:
 	uint16_t port;
+	server::Database db;
 	std::unordered_map<std::string, mppconn_t> clients;
 	std::unordered_map<std::string, Room*> rooms;
 	std::set<uWS::WebSocket> roomlist_watchers;

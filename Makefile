@@ -1,4 +1,4 @@
-OBJS = server.cpp msg.cpp
+OBJS = server.cpp msg.cpp limiter.cpp database.cpp
 UWS = uWebSockets/src/Extensions.cpp uWebSockets/src/HTTPSocket.cpp uWebSockets/src/Network.cpp uWebSockets/src/Server.cpp uWebSockets/src/UTF8.cpp uWebSockets/src/WebSocket.cpp uWebSockets/src/EventSystem.cpp
 
 CC = g++

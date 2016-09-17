@@ -15,7 +15,7 @@ void server::msg::n(server* sv, json j, uWS::WebSocket& s){
 			if(ssearch != sv->rooms.end() && (!ssearch->second->is_crownsolo()
 				|| ssearch->second->is_owner(search->second.user))){
 				clinfo_t* usr = ssearch->second->get_info(search->second.user);
-				if(usr){
+				if(usr && usr->quota.noterate.can_spend()){
 					j["p"] = usr->id;
 					auto res = json::array();
 					res[0] = j;
@@ -26,7 +26,7 @@ void server::msg::n(server* sv, json j, uWS::WebSocket& s){
 	}
 }
 
-/* NOTE: messages don't have a timestamp, or the room id of the user.
+/* NOTE: messages don't have the room id of the user.
  * It doesn't seem to be used by the original client. (_id is sent, though)
  */
 
@@ -37,15 +37,19 @@ void server::msg::a(server* sv, json j, uWS::WebSocket& s){
 	   j["message"].get<std::string>().size() <= 512){
 		auto ssearch = sv->rooms.find(search->second.sockets.at(s));
 		if(ssearch != sv->rooms.end() && ssearch->second->chat_on()){
-			json res = json::array();
-			res[0] = {
-				{"m", "a"},
-				{"a", j["message"].get<std::string>()},
-				{"p", search->second.user->get_json()}
-			};
-			ssearch->second->push_chat(res[0]);
-			ssearch->second->broadcast(res, s);
-			s.send((char *)res.dump().c_str(), res.dump().size(), uWS::TEXT);
+			clinfo_t* usr = ssearch->second->get_info(search->second.user);
+			if(usr && usr->quota.chat.can_spend()){
+				json res = json::array();
+				res[0] = {
+					{"m", "a"},
+					{"a", j["message"].get<std::string>()},
+					{"p", search->second.user->get_json()},
+					{"t", js_date_now()}
+				};
+				ssearch->second->push_chat(res[0]);
+				ssearch->second->broadcast(res, s);
+				s.send((char *)res.dump().c_str(), res.dump().size(), uWS::TEXT);
+			}
 		}
 	}
 }
@@ -69,7 +73,7 @@ void server::msg::m(server* sv, json j, uWS::WebSocket& s){
 		auto ssearch = sv->rooms.find(search->second.sockets.at(s));
 		if(ssearch != sv->rooms.end()){
 			clinfo_t* usr = ssearch->second->get_info(search->second.user);
-			if(usr){
+			if(usr && usr->quota.curs.can_spend()){
 				usr->x = x;
 				usr->y = y;
 				res[0] = json::object({
@@ -98,7 +102,7 @@ void server::msg::t(server* sv, json j, uWS::WebSocket& s){
 void server::msg::ch(server* sv, json j, uWS::WebSocket& s){
 	auto res = json::array();
 	auto search = sv->clients.find(*(std::string *) s.getData());
-	if(j["_id"].is_string() && search != sv->clients.end()){
+	if(j["_id"].is_string() && search != sv->clients.end() && search->second.user->quota.room.can_spend()){
 		std::string nr = j["_id"].get<std::string>();
 		nlohmann::json set = {};
 		if(j["set"].is_object()) set = j["set"];
@@ -153,16 +157,20 @@ void server::msg::chown(server* sv, json j, uWS::WebSocket& s){
 		&& !ssearch->second->is_owner(NULL))
 		|| ssearch->second->is_owner(newowner))
 			return;
-	ssearch->second->set_owner(newowner);
-	json res = json::array();
-	res[0] = ssearch->second->get_json(ssearch->first, true);
-	uWS::WebSocket a;
-	ssearch->second->broadcast(res, a);
+	if(js_date_now() - ssearch->second->get_crowninfo().time > 15000 ||
+	   ssearch->second->get_crowninfo().oldowner == newowner){
+		ssearch->second->set_owner(newowner);
+		json res = json::array();
+		res[0] = ssearch->second->get_json(ssearch->first, true);
+		uWS::WebSocket a;
+		ssearch->second->broadcast(res, a);
+	}
 }
 
 void server::msg::chset(server* sv, json j, uWS::WebSocket& s){
 	auto search = sv->clients.find(*(std::string *) s.getData());
 	if(search == sv->clients.end()) return;
+	if(!search->second.user->quota.room.can_spend()) return; /* ! */
 	auto ssearch = sv->rooms.find(search->second.sockets.at(s));
 	if(ssearch == sv->rooms.end()) return;
 	if(!ssearch->second->is_owner(search->second.user)) return;
@@ -175,7 +183,7 @@ void server::msg::userset(server* sv, json j, uWS::WebSocket& s){
 	if(j["set"].is_object() && j["set"]["name"].is_string()){
 		std::string ip = *(std::string *) s.getData();
 		auto search = sv->clients.find(ip);
-		if(search != sv->clients.end()){
+		if(search != sv->clients.end() && search->second.user->quota.name.can_spend()){
 			std::string newn = j["set"]["name"].get<std::string>();
 			if(newn.size() <= 40){
 				search->second.user->set_name(newn);
@@ -185,7 +193,35 @@ void server::msg::userset(server* sv, json j, uWS::WebSocket& s){
 	}
 }
 
-
+void server::msg::adminmsg(server* sv, json j, uWS::WebSocket& s){
+	if(j["password"].is_string() && j["password"].get<std::string>() == "hunter2" && j["set"].is_object()){
+		std::string ip(*(std::string *) s.getData());
+		auto search = sv->clients.find(ip);
+		if(search == sv->clients.end()) return;
+		auto ssearch = sv->rooms.find(search->second.sockets.at(s));
+		if(ssearch == sv->rooms.end()) return;
+		if(j["set"]["user"].is_object()){
+			if(!j["set"]["user"]["id"].is_string()) return;
+			Client* selected = ssearch->second->get_client(j["set"]["user"]["id"].get<std::string>());
+			if(j["set"]["user"]["color"].is_string()){
+				uint32_t ncolor = 0;
+				std::string strcolor = j["set"]["user"]["color"].get<std::string>();
+				if(strcolor.size() > 1 && strcolor[0] == '#'){
+					strcolor.erase(0, 1);
+					try {
+						ncolor = std::stoul(std::string("0x") + strcolor, nullptr, 16);
+					} catch(std::invalid_argument) { return; }
+					  catch(std::out_of_range) { return; }
+				}
+				selected->set_color(ncolor);
+				sv->user_upd(ip);
+			}
+		}
+		/*if(j["set"]["channel"].is_object()){
+			ssearch->second->set_param(j["set"], ssearch->first);
+		}*/
+	}
+}
 
 void server::msg::kickban(server* sv, json j, uWS::WebSocket& s){
 	return;
@@ -200,6 +236,7 @@ void server::msg::lsl(server* sv, json j, uWS::WebSocket& s){
 void server::msg::lsp(server* sv, json j, uWS::WebSocket& s){
 	auto search = sv->clients.find(*(std::string *) s.getData());
 	if(search == sv->clients.end()) return;
+	if(!search->second.user->quota.rmls.can_spend()) return;
 	json res = json::array();
 	res[0] = {
 		{"m", "ls"},

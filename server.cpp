@@ -1,5 +1,6 @@
 #include "server.hpp"
 #include <sstream>
+#include <algorithm> /* std::copy */
 
 /* sha1 hashing */
 #include <openssl/sha.h>
@@ -95,6 +96,10 @@ nlohmann::json server::Client::get_json(){
 	});
 }
 
+server::Database::pinfo_t server::Client::get_dbdata(){
+	return {true, color, name};
+}
+
 void server::Room::broadcast(nlohmann::json j, uWS::WebSocket& exclude){
 	uWS::WebSocket::PreparedMessage* prep = uWS::WebSocket::prepareMessage(
 		(char *)j.dump().c_str(), j.dump().size(), uWS::TEXT, false);
@@ -128,7 +133,6 @@ clinfo_t* server::Room::get_info(Client* c){
 }
 
 void server::Room::set_param(nlohmann::json j, std::string _id){
-	/* TODO: check if user is owner */
 	bool updated = false;
 	bool nvisible = visible;
 	bool nchat = chat;
@@ -178,7 +182,7 @@ void server::Room::set_owner(Client* c){
 		y = search->second.y;
 	}
 	/* the ternary makes sure the crown doesn't land off the screen */
-	crown = {c, {x, y}, {x > 95 ? 95 : x < 5 ? 5 : x, y+25 > 95 ? 95 : y+25 < 5 ? 5 : y+25}, js_date_now()};
+	crown = {c, crown.owner, {x, y}, {x > 95 ? 95 : x < 5 ? 5 : x, y+25 > 95 ? 95 : y+25 < 5 ? 5 : y+25}, js_date_now()};
 }
 
 server::Client* server::Room::get_client(std::string id){
@@ -231,7 +235,7 @@ std::string server::Room::join_usr(uWS::WebSocket& s, mppconn_t& c, std::string 
 	if(search == ids.end()){
 		/* TODO: generate better id? */
 		id = std::to_string(js_date_now());
-		ids[c.user] = {std::set<uWS::WebSocket>{s}, id, -10, -10};
+		ids[c.user] = {std::set<uWS::WebSocket>{s}, {}, id, -10, -10};
 	} else {
 		search->second.sockets.emplace(s);
 		id = search->second.id;
@@ -244,6 +248,7 @@ void server::user_upd(std::string ip){
 	/* a set so we don't update the same room more than once */
 	std::set<Room*> roomstoupdate;
 	Client* c = clients.at(ip).user;
+	c->changed = true;
 	for(auto& sock : clients.at(ip).sockets){
 		auto search = rooms.find(sock.second);
 		if(search != rooms.end()){
@@ -322,6 +327,7 @@ nlohmann::json server::genusr(uWS::WebSocket& s){
 	if(search == clients.end()){
 		unsigned char hash[20];
 		std::string _id(20, '0');
+		std::string name("Anonymoose");
 		SHA1((unsigned char*)ip.c_str(), ip.size(), hash);
 		for(uint8_t i = 10; i--;){
 			_id[2 * i] = hexmap[(hash[i] & 0xF0) >> 4];
@@ -331,9 +337,19 @@ nlohmann::json server::genusr(uWS::WebSocket& s){
 		                 (uint32_t)hash[12] << 16 |
 		                 (uint16_t)hash[13] << 8 |
 		                           hash[14];
-		color += 0x222222; /* colors seem to be pretty dark otherwise */
+		
+		uint32_t dhash = (uint32_t)hash[15] << 24 |
+		                 (uint32_t)hash[16] << 16 |
+		                 (uint16_t)hash[17] << 8 |
+		                           hash[18];
+		server::Database::pinfo_t dbusr = db.get_usrinfo(dhash);
+		if(dbusr.found){
+			std::cout << "User found in database." << std::endl;
+			color = dbusr.color;
+			name = dbusr.name;
+		}
 		std::cout << "New client: " << ip << std::endl;
-		clients[ip] = {new server::Client(_id, color), {{s, ""}}};
+		clients[ip] = {new server::Client(dhash, _id, color, name), {{s, ""}}};
 	} else {
 		search->second.sockets.emplace(s, "");
 	}
@@ -368,6 +384,11 @@ void server::reg_evts(uWS::Server &s){
 				search->second.sockets.erase(socket);
 			}
 			if(!search->second.sockets.size()){
+				if(search->second.user->changed){
+					std::cout << "Saving client." << std::endl;
+					db.set_usrinfo(search->second.user->dhash,
+						       search->second.user->get_dbdata());
+				}
 				std::cout << "Deleted client: " << ip << std::endl;
 				delete search->second.user;
 				clients.erase(ip);
