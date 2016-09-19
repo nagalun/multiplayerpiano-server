@@ -10,12 +10,11 @@ void server::msg::n(server* sv, json j, uWS::WebSocket& s){
 	if(j["n"].is_array() && j["t"].is_number()){
 		auto search = sv->clients.find(*(std::string *) s.getData());
 		if(search != sv->clients.end()){
-			/* this MAY be dangerous? */
 			auto ssearch = sv->rooms.find(search->second.sockets.at(s));
 			if(ssearch != sv->rooms.end() && (!ssearch->second->is_crownsolo()
 				|| ssearch->second->is_owner(search->second.user))){
 				clinfo_t* usr = ssearch->second->get_info(search->second.user);
-				if(usr && usr->quota.noterate.can_spend()){
+				if(usr){
 					j["p"] = usr->id;
 					auto res = json::array();
 					res[0] = j;
@@ -187,25 +186,26 @@ void server::msg::userset(server* sv, json j, uWS::WebSocket& s){
 			std::string newn = j["set"]["name"].get<std::string>();
 			if(newn.size() <= 40){
 				search->second.user->set_name(newn);
-				sv->user_upd(ip);
+				sv->user_upd(search->second);
 			}
 		}
 	}
 }
 
 void server::msg::adminmsg(server* sv, json j, uWS::WebSocket& s){
-	if(j["password"].is_string() && j["password"].get<std::string>() == "hunter2" && j["set"].is_object()){
+	if(j["password"].is_string() && sv->is_adminpw(j["password"].get<std::string>()) && j["message"].is_object()){
 		std::string ip(*(std::string *) s.getData());
 		auto search = sv->clients.find(ip);
 		if(search == sv->clients.end()) return;
 		auto ssearch = sv->rooms.find(search->second.sockets.at(s));
 		if(ssearch == sv->rooms.end()) return;
-		if(j["set"]["user"].is_object()){
-			if(!j["set"]["user"]["id"].is_string()) return;
-			Client* selected = ssearch->second->get_client(j["set"]["user"]["id"].get<std::string>());
-			if(j["set"]["user"]["color"].is_string()){
+		if(j["message"]["m"].is_string()){
+			std::string mtype(j["message"]["m"].get<std::string>());
+			if(mtype == "color" && j["message"]["id"].is_string() && j["message"]["color"].is_string()){
+				Client* selected = ssearch->second->get_client(j["message"]["id"].get<std::string>());
+				if(!selected) return;
 				uint32_t ncolor = 0;
-				std::string strcolor = j["set"]["user"]["color"].get<std::string>();
+				std::string strcolor = j["message"]["color"].get<std::string>();
 				if(strcolor.size() > 1 && strcolor[0] == '#'){
 					strcolor.erase(0, 1);
 					try {
@@ -214,12 +214,16 @@ void server::msg::adminmsg(server* sv, json j, uWS::WebSocket& s){
 					  catch(std::out_of_range) { return; }
 				}
 				selected->set_color(ncolor);
-				sv->user_upd(ip);
+				/* this is by far the ugliest workaround on this server, please kill me. */
+				clinfo_t* cl = ssearch->second->get_info(selected);
+				auto it = cl->sockets.begin();
+				uWS::WebSocket selsock = *it;
+				std::string selip(*(std::string *) selsock.getData());
+				auto selsrch = sv->clients.find(selip);
+				if(selsrch != sv->clients.end())
+					sv->user_upd(selsrch->second);
 			}
 		}
-		/*if(j["set"]["channel"].is_object()){
-			ssearch->second->set_param(j["set"], ssearch->first);
-		}*/
 	}
 }
 

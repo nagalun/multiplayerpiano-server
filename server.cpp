@@ -1,6 +1,5 @@
 #include "server.hpp"
 #include <sstream>
-#include <algorithm> /* std::copy */
 
 /* sha1 hashing */
 #include <openssl/sha.h>
@@ -244,19 +243,18 @@ std::string server::Room::join_usr(uWS::WebSocket& s, mppconn_t& c, std::string 
 	return id;
 }
 
-void server::user_upd(std::string ip){
-	/* a set so we don't update the same room more than once */
+void server::user_upd(server::mppconn_t& c){
+	/* a set so we don't update the same room twice */
 	std::set<Room*> roomstoupdate;
-	Client* c = clients.at(ip).user;
-	c->changed = true;
-	for(auto& sock : clients.at(ip).sockets){
+	c.user->changed = true;
+	for(auto& sock : c.sockets){
 		auto search = rooms.find(sock.second);
 		if(search != rooms.end()){
 			roomstoupdate.emplace(search->second);
 		}
 	}
 	for(auto r : roomstoupdate){
-		r->part_upd(c);
+		r->part_upd(c.user);
 	}
 }
 
@@ -278,7 +276,8 @@ std::string server::set_room(std::string newroom, uWS::WebSocket& s, mppconn_t& 
 		
 		if(old != rooms.end()){
 			bool d = old->second->kick_usr(s, m, old->first);
-			rooml_upd(old->second, old->first);
+			if(old->second->is_visible())
+				rooml_upd(old->second, old->first);
 			if(d){
 				std::cout << "Deleted room: " << old->first << std::endl;
 				delete old->second;
@@ -300,7 +299,8 @@ std::string server::set_room(std::string newroom, uWS::WebSocket& s, mppconn_t& 
 			room = newr->second;
 		}
 		std::string id = room->join_usr(s, m, newroom);
-		rooml_upd(room, newroom);
+		if(room->is_visible())
+			rooml_upd(room, newroom);
 		return id;
 	}
 	return "null";
@@ -426,7 +426,12 @@ void server::parse_msg(nlohmann::json &msg, uWS::WebSocket& socket){
 	}
 }
 
-int main(){
-	server s(1234);
-	s.run();
+int main(int argc, char *argv[]){
+	if(argc > 1){
+		server s(argc>2?std::stoul(argv[2]):1234, argv[1]);
+		s.run();
+	} else {
+		std::cout << "Usage: " << argv[0] << " ADMINPASSWORD [PORT {1234}]" << std::endl;
+	}
+	return 1;
 }

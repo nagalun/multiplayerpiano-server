@@ -90,6 +90,7 @@ public:
 		bool is_lobby(){return lobby;};
 		bool chat_on(){return chat;};
 		bool is_crownsolo(){return crownsolo;};
+		bool is_visible(){return visible;};
 		bool is_owner(Client* c){return c == crown.owner;};
 		std::string join_usr(uWS::WebSocket&, mppconn_t&, std::string);
 		void broadcast(nlohmann::json, uWS::WebSocket&);
@@ -118,7 +119,7 @@ public:
 		static void lsl(server*, nlohmann::json, uWS::WebSocket&); /* -ls */
 		static void lsp(server*, nlohmann::json, uWS::WebSocket&); /* +ls */
 	};
-	server(uint16_t p) : port(p), db("database/"){
+	server(uint16_t p, const std::string& pw) : port(p), db("database/"), adminpw(pw){
 		funcmap = {
 			{"n", std::bind(msg::n, this, std::placeholders::_1, std::placeholders::_2)},
 			{"a", std::bind(msg::a, this, std::placeholders::_1, std::placeholders::_2)},
@@ -139,13 +140,15 @@ public:
 	void reg_evts(uWS::Server &s);
 	void parse_msg(nlohmann::json &msg, uWS::WebSocket& socket);
 	std::string set_room(std::string, uWS::WebSocket&, mppconn_t&, nlohmann::json);
-	void user_upd(std::string);
+	void user_upd(mppconn_t&);
 	void rooml_upd(Room*, std::string);
 	nlohmann::json get_roomlist();
 	nlohmann::json genusr(uWS::WebSocket&);
+	bool is_adminpw(const std::string p){return p == adminpw;};
 private:
 	uint16_t port;
 	server::Database db;
+	std::string adminpw;
 	std::unordered_map<std::string, mppconn_t> clients;
 	std::unordered_map<std::string, Room*> rooms;
 	std::set<uWS::WebSocket> roomlist_watchers;
