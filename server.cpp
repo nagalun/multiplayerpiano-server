@@ -111,6 +111,18 @@ void server::Room::broadcast(nlohmann::json j, uWS::WebSocket& exclude){
 	uWS::WebSocket::finalizeMessage(prep);
 }
 
+void server::Room::broadcast(const char* j, uWS::WebSocket& exclude, size_t len){
+	uWS::WebSocket::PreparedMessage* prep = uWS::WebSocket::prepareMessage(
+		(char*)j, len, uWS::BINARY, false);
+	for(auto& c : ids){
+		for(auto sock : c.second.sockets){
+			if(sock == exclude) continue;
+			sock.sendPrepared(prep);
+		}
+	}
+	uWS::WebSocket::finalizeMessage(prep);
+}
+
 void server::Room::part_upd(Client* c){
 	auto search = ids.find(c);
 	if(search != ids.end()){
@@ -228,19 +240,22 @@ bool server::Room::kick_usr(uWS::WebSocket& s, mppconn_t& c, std::string rname){
 	return false;
 }
 
-std::string server::Room::join_usr(uWS::WebSocket& s, mppconn_t& c, std::string rname){
+jroom_clinfo_t server::Room::join_usr(uWS::WebSocket& s, mppconn_t& c, std::string rname){
 	auto search = ids.find(c.user);
 	std::string id;
+	bool newclient;
 	if(search == ids.end()){
 		/* TODO: generate better id? */
 		id = std::to_string(js_date_now());
 		ids[c.user] = {std::set<uWS::WebSocket>{s}, {}, id, -10, -10};
+		newclient = true;
 	} else {
 		search->second.sockets.emplace(s);
 		id = search->second.id;
+		newclient = false;
 	}
 	c.sockets.at(s) = rname;
-	return id;
+	return {id, newclient};
 }
 
 void server::user_upd(server::mppconn_t& c){
@@ -269,7 +284,7 @@ nlohmann::json server::get_roomlist(){
 	return res;
 }
 
-std::string server::set_room(std::string newroom, uWS::WebSocket& s, mppconn_t& m, nlohmann::json set){
+jroom_clinfo_t server::set_room(std::string newroom, uWS::WebSocket& s, mppconn_t& m, nlohmann::json set){
 	auto thissocket = m.sockets.find(s);
 	if(thissocket != m.sockets.end() && thissocket->second != newroom && newroom.size() <= 512){
 		auto old = rooms.find(thissocket->second);
@@ -298,12 +313,12 @@ std::string server::set_room(std::string newroom, uWS::WebSocket& s, mppconn_t& 
 		} else {
 			room = newr->second;
 		}
-		std::string id = room->join_usr(s, m, newroom);
+		jroom_clinfo_t info = room->join_usr(s, m, newroom);
 		if(room->is_visible())
 			rooml_upd(room, newroom);
-		return id;
+		return info;
 	}
-	return "null";
+	return {"null", false};
 }
 
 void server::rooml_upd(Room* r, std::string _id){
@@ -358,7 +373,7 @@ nlohmann::json server::genusr(uWS::WebSocket& s){
 
 void server::run(){
 	uWS::EventSystem es(uWS::MASTER);
-	uWS::Server s(es, port, uWS::PERMESSAGE_DEFLATE | uWS::NO_DELAY, 32768);
+	uWS::Server s(es, port, uWS::NO_DELAY, 16384);
 	reg_evts(s);
 	es.run();
 }
@@ -398,6 +413,15 @@ void server::reg_evts(uWS::Server &s){
 	});
 	
 	s.onMessage([this, &s](uWS::WebSocket socket, const char *message, size_t length, uWS::OpCode opCode){
+#ifndef VANILLA_SERVER
+		if(opCode == uWS::BINARY && length > 1){
+			switch((uint8_t)message[0]){
+				case 1:
+					msg::bin_n(this, message, length, socket);
+					break;
+			}
+		} else 
+#endif
 		if(opCode == uWS::TEXT) try {
 			auto msg = nlohmann::json::parse(std::string(message, length));
 			if(msg.is_array())

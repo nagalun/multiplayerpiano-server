@@ -11,3 +11,6 @@ OBJ_NAME = out
 
 all : $(OBJS)
 	$(CC) $(OBJS) $(UWS) $(COMPILER_FLAGS) $(LIBS) -o $(OBJ_NAME)
+
+vanilla : $(OBJS)
+	$(CC) $(OBJS) $(UWS) $(COMPILER_FLAGS) -DVANILLA_SERVER $(LIBS) -o $(OBJ_NAME)

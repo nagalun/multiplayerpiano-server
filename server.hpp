@@ -9,6 +9,10 @@
 #include "limiter.hpp"
 #include <fstream>
 
+/* Define VANILLA_SERVER if you don't want custom network messages, like non-JSON note data
+ * #define VANILLA_SERVER
+ */
+
 /* id, connections (multiple tabs),
  * and mouse x & y of the client in a room.
  ***/
@@ -18,6 +22,12 @@ struct clinfo_t {
 	std::string id;
 	float x;
 	float y;
+};
+
+/* Joined room client info */
+struct jroom_clinfo_t {
+	std::string id;
+	bool newclient;
 };
 
 class server {
@@ -92,8 +102,9 @@ public:
 		bool is_crownsolo(){return crownsolo;};
 		bool is_visible(){return visible;};
 		bool is_owner(Client* c){return c == crown.owner;};
-		std::string join_usr(uWS::WebSocket&, mppconn_t&, std::string);
+		jroom_clinfo_t join_usr(uWS::WebSocket&, mppconn_t&, std::string);
 		void broadcast(nlohmann::json, uWS::WebSocket&);
+		void broadcast(const char*, uWS::WebSocket&, size_t);
 		bool kick_usr(uWS::WebSocket&, mppconn_t&, std::string);
 		void set_param(nlohmann::json, std::string);
 		void set_owner(Client*);
@@ -101,6 +112,9 @@ public:
 	};
 	class msg {
 	public:
+#ifndef VANILLA_SERVER
+		static void bin_n(server*, const char*, size_t, uWS::WebSocket&);
+#endif
 		static void n(server*, nlohmann::json, uWS::WebSocket&);
 		static void a(server*, nlohmann::json, uWS::WebSocket&);
 		static void m(server*, nlohmann::json, uWS::WebSocket&);
@@ -139,7 +153,7 @@ public:
 	void run();
 	void reg_evts(uWS::Server &s);
 	void parse_msg(nlohmann::json &msg, uWS::WebSocket& socket);
-	std::string set_room(std::string, uWS::WebSocket&, mppconn_t&, nlohmann::json);
+	jroom_clinfo_t set_room(std::string, uWS::WebSocket&, mppconn_t&, nlohmann::json);
 	void user_upd(mppconn_t&);
 	void rooml_upd(Room*, std::string);
 	nlohmann::json get_roomlist();

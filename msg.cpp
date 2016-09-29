@@ -5,6 +5,33 @@ using nlohmann::json;
 
 long int js_date_now();
 
+#ifndef VANILLA_SERVER
+void server::msg::bin_n(server* sv, const char* msg, size_t len, uWS::WebSocket& s){
+	if(len < 12) return;
+	auto search = sv->clients.find(*(std::string *) s.getData());
+	if(search != sv->clients.end()){
+		auto ssearch = sv->rooms.find(search->second.sockets.at(s));
+		if(ssearch != sv->rooms.end() && (!ssearch->second->is_crownsolo()
+			|| ssearch->second->is_owner(search->second.user))){
+			clinfo_t* usr = ssearch->second->get_info(search->second.user);
+			if(usr){
+				unsigned long int id = std::stoul(usr->id);
+				char* newmsg = (char*)malloc(len + sizeof(id) + 1);
+				if(!newmsg){
+					std::cout << "Failed to allocate memory for bin note msg" << std::endl;
+					return;
+				}
+				newmsg[0] = '\1';
+				memcpy(newmsg + 1, &id, sizeof(id));
+				memcpy(newmsg + sizeof(id) + 1, msg, len);
+				ssearch->second->broadcast(newmsg, s, len + sizeof(id) + 1);
+				free(newmsg);
+			}
+		}
+	}
+}
+#endif
+
 void server::msg::n(server* sv, json j, uWS::WebSocket& s){
 	/* TODO: validate note data before sending */
 	if(j["n"].is_array() && j["t"].is_number()){
@@ -106,20 +133,22 @@ void server::msg::ch(server* sv, json j, uWS::WebSocket& s){
 		nlohmann::json set = {};
 		if(j["set"].is_object()) set = j["set"];
 		if(nr.size() > 512) return;
-		std::string id = sv->set_room(nr, s, search->second, set);
-		if(id == "null") return;
+		jroom_clinfo_t info = sv->set_room(nr, s, search->second, set);
+		if(info.id == "null") return;
 		Room* room = sv->rooms.at(nr);
 		if(!room) return;
 		res[0] = room->get_json(nr, true);
 		
 		/*room->broadcast(res, s); this can be changed for the following, less data sent. */
-		json upd = json::array();
-		upd[0] = search->second.user->get_json();
-		upd[0]["id"] = id;
-		upd[0]["m"] = "p";
-		room->broadcast(upd, s);
+		if(info.newclient){
+			json upd = json::array();
+			upd[0] = search->second.user->get_json();
+			upd[0]["id"] = info.id;
+			upd[0]["m"] = "p";
+			room->broadcast(upd, s);
+		}
 		
-		res[0]["p"] = id;
+		res[0]["p"] = info.id;
 		res[1] = {
 			{"m", "c"},
 			{"c", room->get_chatlog_json()}
