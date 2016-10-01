@@ -22,9 +22,9 @@ void server::msg::bin_n(server* sv, const char* msg, size_t len, uWS::WebSocket&
 					return;
 				}
 				newmsg[0] = '\1';
+				memcpy(newmsg + sizeof(id), msg, len);
 				memcpy(newmsg + 1, &id, sizeof(id));
-				memcpy(newmsg + sizeof(id) + 1, msg, len);
-				ssearch->second->broadcast(newmsg, s, len + sizeof(id) + 1);
+				ssearch->second->broadcast(newmsg, s, len + sizeof(id));
 				free(newmsg);
 			}
 		}
