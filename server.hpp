@@ -8,6 +8,8 @@
 #include <sys/time.h>
 #include "limiter.hpp"
 #include <fstream>
+#include <sstream>
+
 
 /* Define VANILLA_SERVER if you don't want custom network messages, like non-JSON note data
  * #define VANILLA_SERVER

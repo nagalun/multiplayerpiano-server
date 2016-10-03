@@ -6,6 +6,31 @@
 
 static const char* hexmap = "0123456789ABCDEF";
 
+size_t getUTF8strlen(const std::string& str){
+	size_t j = 0, i = 0, x = 1;
+	while (i < str.size()) {
+		if (x > 4) /* Invalid unicode */
+			return SIZE_MAX;
+		
+		if ((str[i] & 0xC0) != 0x80){
+			j += x == 4 ? 2 : 1;
+			x = 1;
+		} else {
+			x++;
+		}
+		i++;
+	}
+	if(x == 4)
+		j++;
+	return (j);
+}
+
+std::string roundfloat(const float x, int prec){
+	std::stringstream ss;
+	ss << std::fixed << std::setprecision(prec) << x;
+	return ss.str();
+}
+
 std::string n2hexstr(uint32_t w, bool alpha = false) {
     const uint8_t l = alpha ? 32 : 24;
     std::string rc(l/4, '0');
@@ -50,12 +75,12 @@ nlohmann::json server::Room::get_json(std::string _id, bool includeppl){
 				j["ch"]["crown"] = {
 					{"time", crown.time},
 					{"startPos", {
-						{"x", crown.startpos[0]},
-						{"y", crown.startpos[1]}
+						{"x", roundfloat(crown.startpos[0], 2)},
+						{"y", roundfloat(crown.startpos[1], 2)}
 					}},
 					{"endPos", {
-						{"x", crown.endpos[0]},
-						{"y", crown.endpos[1]}
+						{"x", roundfloat(crown.endpos[0], 2)},
+						{"y", roundfloat(crown.endpos[1], 2)}
 					}}
 				};
 			}
@@ -63,8 +88,8 @@ nlohmann::json server::Room::get_json(std::string _id, bool includeppl){
 		auto ppl = nlohmann::json::array();
 		for(auto& c : ids){
 			auto inf = c.first->get_json();
-			inf["x"] = c.second.x;
-			inf["y"] = c.second.y;
+			inf["x"] = roundfloat(c.second.x, 2);
+			inf["y"] = roundfloat(c.second.y, 2);
 			inf["id"] = c.second.id;
 			ppl.push_back(inf);
 		}
@@ -286,14 +311,14 @@ nlohmann::json server::get_roomlist(){
 
 jroom_clinfo_t server::set_room(std::string newroom, uWS::WebSocket& s, mppconn_t& m, nlohmann::json set){
 	auto thissocket = m.sockets.find(s);
-	if(thissocket != m.sockets.end() && thissocket->second != newroom && newroom.size() <= 512){
+	if(thissocket != m.sockets.end() && thissocket->second != newroom){
 		auto old = rooms.find(thissocket->second);
 		
 		if(old != rooms.end()){
-			bool d = old->second->kick_usr(s, m, old->first);
+			bool isempty = old->second->kick_usr(s, m, old->first);
 			if(old->second->is_visible())
 				rooml_upd(old->second, old->first);
-			if(d){
+			if(isempty){
 				std::cout << "Deleted room: " << old->first << std::endl;
 				delete old->second;
 				rooms.erase(old);
@@ -419,6 +444,10 @@ void server::reg_evts(uWS::Server &s){
 				case 1:
 					msg::bin_n(this, message, length, socket);
 					break;
+				default:
+					socket.close();
+					return;
+					break;
 			}
 		} else 
 #endif
@@ -428,6 +457,9 @@ void server::reg_evts(uWS::Server &s){
 				parse_msg(msg, socket);
 		} catch(std::invalid_argument) {
 			/* kick his ass */
+			socket.close();
+			return;
+		} else {
 			socket.close();
 			return;
 		}

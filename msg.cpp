@@ -4,10 +4,16 @@
 using nlohmann::json;
 
 long int js_date_now();
+std::string roundfloat(const float, int);
+size_t getUTF8strlen(const std::string&);
 
 #ifndef VANILLA_SERVER
 void server::msg::bin_n(server* sv, const char* msg, size_t len, uWS::WebSocket& s){
 	if(len < 12) return;
+	/* very simple filter */
+	for(size_t x = 9; x < len; x += 3)
+		if((uint8_t)msg[x] > 87)
+			return;
 	auto search = sv->clients.find(*(std::string *) s.getData());
 	if(search != sv->clients.end()){
 		auto ssearch = sv->rooms.find(search->second.sockets.at(s));
@@ -60,7 +66,7 @@ void server::msg::a(server* sv, json j, uWS::WebSocket& s){
 	auto search = sv->clients.find(*(std::string *) s.getData());
 	if(search != sv->clients.end() &&
 	   j["message"].is_string() &&
-	   j["message"].get<std::string>().size() <= 512){
+	   getUTF8strlen(j["message"].get<std::string>()) <= 512){
 		auto ssearch = sv->rooms.find(search->second.sockets.at(s));
 		if(ssearch != sv->rooms.end() && ssearch->second->chat_on()){
 			clinfo_t* usr = ssearch->second->get_info(search->second.user);
@@ -81,7 +87,6 @@ void server::msg::a(server* sv, json j, uWS::WebSocket& s){
 }
 
 void server::msg::m(server* sv, json j, uWS::WebSocket& s){
-	/* TODO: fix rounding of floats */
 	auto res = json::array();
 	float x = 0;
 	float y = 0;
@@ -105,8 +110,8 @@ void server::msg::m(server* sv, json j, uWS::WebSocket& s){
 				res[0] = json::object({
 					{"m", "m"},
 					{"id", usr->id},
-					{"x", x},
-					{"y", y}
+					{"x", roundfloat(x, 2)},
+					{"y", roundfloat(y, 2)}
 				});
 				ssearch->second->broadcast(res, s);
 			}
@@ -132,7 +137,7 @@ void server::msg::ch(server* sv, json j, uWS::WebSocket& s){
 		std::string nr = j["_id"].get<std::string>();
 		nlohmann::json set = {};
 		if(j["set"].is_object()) set = j["set"];
-		if(nr.size() > 512) return;
+		if(getUTF8strlen(nr) > 512) return;
 		jroom_clinfo_t info = sv->set_room(nr, s, search->second, set);
 		if(info.id == "null") return;
 		Room* room = sv->rooms.at(nr);
@@ -213,7 +218,7 @@ void server::msg::userset(server* sv, json j, uWS::WebSocket& s){
 		auto search = sv->clients.find(ip);
 		if(search != sv->clients.end() && search->second.user->quota.name.can_spend()){
 			std::string newn = j["set"]["name"].get<std::string>();
-			if(newn.size() <= 40){
+			if(getUTF8strlen(newn) <= 40){
 				search->second.user->set_name(newn);
 				sv->user_upd(search->second);
 			}
