@@ -106,7 +106,7 @@ nlohmann::json server::Room::get_chatlog_json(){
 	return log;
 }
 
-void server::Room::push_chat(nlohmann::json j){
+void server::Room::push_chat(nlohmann::json& j){
 	chatlog.push_back(j);
 	if(chatlog.size() > 32)
 		chatlog.pop_front();
@@ -124,8 +124,8 @@ server::Database::pinfo_t server::Client::get_dbdata(){
 	return {true, color, name};
 }
 
-void server::Room::broadcast(nlohmann::json j, uWS::WebSocket& exclude){
-	uWS::WebSocket::PreparedMessage* prep = uWS::WebSocket::prepareMessage(
+void server::Room::broadcast(nlohmann::json& j, uWS::WebSocket<uWS::SERVER> exclude){
+	uWS::WebSocket<uWS::SERVER>::PreparedMessage* prep = uWS::WebSocket<uWS::SERVER>::prepareMessage(
 		(char *)j.dump().c_str(), j.dump().size(), uWS::TEXT, false);
 	for(auto& c : ids){
 		for(auto sock : c.second.sockets){
@@ -133,11 +133,11 @@ void server::Room::broadcast(nlohmann::json j, uWS::WebSocket& exclude){
 			sock.sendPrepared(prep);
 		}
 	}
-	uWS::WebSocket::finalizeMessage(prep);
+	uWS::WebSocket<uWS::SERVER>::finalizeMessage(prep);
 }
 
-void server::Room::broadcast(const char* j, uWS::WebSocket& exclude, size_t len){
-	uWS::WebSocket::PreparedMessage* prep = uWS::WebSocket::prepareMessage(
+void server::Room::broadcast(const char* j, uWS::WebSocket<uWS::SERVER> exclude, size_t len){
+	uWS::WebSocket<uWS::SERVER>::PreparedMessage* prep = uWS::WebSocket<uWS::SERVER>::prepareMessage(
 		(char*)j, len, uWS::BINARY, false);
 	for(auto& c : ids){
 		for(auto sock : c.second.sockets){
@@ -145,13 +145,13 @@ void server::Room::broadcast(const char* j, uWS::WebSocket& exclude, size_t len)
 			sock.sendPrepared(prep);
 		}
 	}
-	uWS::WebSocket::finalizeMessage(prep);
+	uWS::WebSocket<uWS::SERVER>::finalizeMessage(prep);
 }
 
 void server::Room::part_upd(Client* c){
 	auto search = ids.find(c);
 	if(search != ids.end()){
-		uWS::WebSocket a;
+		uWS::WebSocket<uWS::SERVER> a;
 		nlohmann::json j = nlohmann::json::array();
 		j[0] = c->get_json();
 		j[0]["id"] = search->second.id;
@@ -168,7 +168,7 @@ clinfo_t* server::Room::get_info(Client* c){
 	return NULL;
 }
 
-void server::Room::set_param(nlohmann::json j, std::string _id){
+void server::Room::set_param(nlohmann::json& j, std::string _id){
 	bool updated = false;
 	bool nvisible = visible;
 	bool nchat = chat;
@@ -204,7 +204,7 @@ void server::Room::set_param(nlohmann::json j, std::string _id){
 		chat = nchat;
 		nlohmann::json j2 = nlohmann::json::array();
 		j2[0] = this->get_json(_id, true);
-		uWS::WebSocket a; /* ugly */
+		uWS::WebSocket<uWS::SERVER> a; /* ugly */
 		this->broadcast(j2, a);
 	}
 }
@@ -228,8 +228,8 @@ server::Client* server::Room::get_client(std::string id){
 	return NULL;
 }
 
-bool server::Room::kick_usr(uWS::WebSocket& s, mppconn_t& c, std::string rname){
-	std::string ip = *(std::string *) s.getData();
+bool server::Room::kick_usr(uWS::WebSocket<uWS::SERVER> s, mppconn_t& c, std::string rname){
+	std::string ip = *(std::string *) s.getUserData();
 	bool ownupd = false;
 	auto ssearch = ids.find(c.user);
 	if(ssearch != ids.end()){
@@ -265,14 +265,14 @@ bool server::Room::kick_usr(uWS::WebSocket& s, mppconn_t& c, std::string rname){
 	return false;
 }
 
-jroom_clinfo_t server::Room::join_usr(uWS::WebSocket& s, mppconn_t& c, std::string rname){
+jroom_clinfo_t server::Room::join_usr(uWS::WebSocket<uWS::SERVER> s, mppconn_t& c, std::string rname){
 	auto search = ids.find(c.user);
 	std::string id;
 	bool newclient;
 	if(search == ids.end()){
 		/* TODO: generate better id? */
 		id = std::to_string(js_date_now());
-		ids[c.user] = {std::set<uWS::WebSocket>{s}, {}, id, -10, -10};
+		ids[c.user] = {std::set<uWS::WebSocket<uWS::SERVER>>{s}, {}, id, -10, -10};
 		newclient = true;
 	} else {
 		search->second.sockets.emplace(s);
@@ -309,7 +309,7 @@ nlohmann::json server::get_roomlist(){
 	return res;
 }
 
-jroom_clinfo_t server::set_room(std::string newroom, uWS::WebSocket& s, mppconn_t& m, nlohmann::json set){
+jroom_clinfo_t server::set_room(std::string newroom, uWS::WebSocket<uWS::SERVER> s, mppconn_t& m, nlohmann::json& set){
 	auto thissocket = m.sockets.find(s);
 	if(thissocket != m.sockets.end() && thissocket->second != newroom){
 		auto old = rooms.find(thissocket->second);
@@ -361,8 +361,8 @@ void server::rooml_upd(Room* r, std::string _id){
 	}
 }
 
-nlohmann::json server::genusr(uWS::WebSocket& s){
-	std::string ip = *(std::string *) s.getData();
+nlohmann::json server::genusr(uWS::WebSocket<uWS::SERVER> s){
+	std::string ip = *(std::string *) s.getUserData();
 	auto search = clients.find(ip);
 	if(search == clients.end()){
 		unsigned char hash[20];
@@ -397,19 +397,18 @@ nlohmann::json server::genusr(uWS::WebSocket& s){
 }
 
 void server::run(){
-	uWS::EventSystem es(uWS::MASTER);
-	uWS::Server s(es, port, uWS::NO_DELAY, 16384);
-	reg_evts(s);
-	es.run();
+	h.listen(port);
+	reg_evts(h);
+	h.run();
 }
 
-void server::reg_evts(uWS::Server &s){
-	s.onConnection([this](uWS::WebSocket socket){
-		socket.setData(new std::string(socket.getAddress().address));
+void server::reg_evts(uWS::Hub &s){
+	s.onConnection([this](uWS::WebSocket<uWS::SERVER> socket, uWS::UpgradeInfo ui){
+		socket.setUserData(new std::string(socket.getAddress().address));
 	});
 	
-	s.onDisconnection([this](uWS::WebSocket socket, int code, const char *message, size_t length){
-		std::string ip = *(std::string *) socket.getData();
+	s.onDisconnection([this](uWS::WebSocket<uWS::SERVER> socket, int c, const char *message, size_t length){
+		std::string ip = *(std::string *) socket.getUserData();
 		roomlist_watchers.erase(socket);
 		auto search = clients.find(ip);
 		if(search != clients.end()){
@@ -434,10 +433,14 @@ void server::reg_evts(uWS::Server &s){
 				clients.erase(ip);
 			}
 		}
-		delete (std::string *)socket.getData();
+		delete (std::string *)socket.getUserData();
 	});
 	
-	s.onMessage([this, &s](uWS::WebSocket socket, const char *message, size_t length, uWS::OpCode opCode){
+	s.onMessage([this](uWS::WebSocket<uWS::SERVER> socket, const char *message, size_t length, uWS::OpCode opCode){
+		if(length > 16384){
+			socket.close();
+			return;
+		}
 #ifndef VANILLA_SERVER
 		if(opCode == uWS::BINARY && length > 1){
 			switch((uint8_t)message[0]){
@@ -466,7 +469,7 @@ void server::reg_evts(uWS::Server &s){
 	});
 }
 
-void server::parse_msg(nlohmann::json &msg, uWS::WebSocket& socket){
+void server::parse_msg(nlohmann::json& msg, uWS::WebSocket<uWS::SERVER> socket){
 	for(auto& m : msg){
 		if(m["m"].is_string()){
 			/* we don't want to continue reading messages if the client said bye */

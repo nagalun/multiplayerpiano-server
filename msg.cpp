@@ -8,13 +8,13 @@ std::string roundfloat(const float, int);
 size_t getUTF8strlen(const std::string&);
 
 #ifndef VANILLA_SERVER
-void server::msg::bin_n(server* sv, const char* msg, size_t len, uWS::WebSocket& s){
+void server::msg::bin_n(server* sv, const char* msg, size_t len, uWS::WebSocket<uWS::SERVER> s){
 	if(len < 12) return;
 	/* very simple filter */
 	for(size_t x = 9; x < len; x += 3)
 		if((uint8_t)msg[x] > 87)
 			return;
-	auto search = sv->clients.find(*(std::string *) s.getData());
+	auto search = sv->clients.find(*(std::string *) s.getUserData());
 	if(search != sv->clients.end()){
 		auto ssearch = sv->rooms.find(search->second.sockets.at(s));
 		if(ssearch != sv->rooms.end() && (!ssearch->second->is_crownsolo()
@@ -38,10 +38,10 @@ void server::msg::bin_n(server* sv, const char* msg, size_t len, uWS::WebSocket&
 }
 #endif
 
-void server::msg::n(server* sv, json j, uWS::WebSocket& s){
+void server::msg::n(server* sv, json& j, uWS::WebSocket<uWS::SERVER> s){
 	/* TODO: validate note data before sending */
 	if(j["n"].is_array() && j["t"].is_number()){
-		auto search = sv->clients.find(*(std::string *) s.getData());
+		auto search = sv->clients.find(*(std::string *) s.getUserData());
 		if(search != sv->clients.end()){
 			auto ssearch = sv->rooms.find(search->second.sockets.at(s));
 			if(ssearch != sv->rooms.end() && (!ssearch->second->is_crownsolo()
@@ -58,12 +58,8 @@ void server::msg::n(server* sv, json j, uWS::WebSocket& s){
 	}
 }
 
-/* NOTE: messages don't have the room id of the user.
- * It doesn't seem to be used by the original client. (_id is sent, though)
- */
-
-void server::msg::a(server* sv, json j, uWS::WebSocket& s){
-	auto search = sv->clients.find(*(std::string *) s.getData());
+void server::msg::a(server* sv, json& j, uWS::WebSocket<uWS::SERVER> s){
+	auto search = sv->clients.find(*(std::string *) s.getUserData());
 	if(search != sv->clients.end() &&
 	   j["message"].is_string() &&
 	   getUTF8strlen(j["message"].get<std::string>()) <= 512){
@@ -78,6 +74,7 @@ void server::msg::a(server* sv, json j, uWS::WebSocket& s){
 					{"p", search->second.user->get_json()},
 					{"t", js_date_now()}
 				};
+				res[0]["p"]["id"] = usr->id;
 				ssearch->second->push_chat(res[0]);
 				ssearch->second->broadcast(res, s);
 				s.send((char *)res.dump().c_str(), res.dump().size(), uWS::TEXT);
@@ -86,7 +83,7 @@ void server::msg::a(server* sv, json j, uWS::WebSocket& s){
 	}
 }
 
-void server::msg::m(server* sv, json j, uWS::WebSocket& s){
+void server::msg::m(server* sv, json& j, uWS::WebSocket<uWS::SERVER> s){
 	auto res = json::array();
 	float x = 0;
 	float y = 0;
@@ -99,7 +96,7 @@ void server::msg::m(server* sv, json j, uWS::WebSocket& s){
 		x = j["x"].get<float>();
 		y = j["y"].get<float>();
 	} else { return; }
-	auto search = sv->clients.find(*(std::string *) s.getData());
+	auto search = sv->clients.find(*(std::string *) s.getUserData());
 	if(search != sv->clients.end()){
 		auto ssearch = sv->rooms.find(search->second.sockets.at(s));
 		if(ssearch != sv->rooms.end()){
@@ -119,7 +116,7 @@ void server::msg::m(server* sv, json j, uWS::WebSocket& s){
 	}
 }
 
-void server::msg::t(server* sv, json j, uWS::WebSocket& s){
+void server::msg::t(server* sv, json& j, uWS::WebSocket<uWS::SERVER> s){
 	auto res = json::array();
 	if(j["e"].is_number()){
 		res[0] = {
@@ -130,12 +127,12 @@ void server::msg::t(server* sv, json j, uWS::WebSocket& s){
 		s.send((char *)res.dump().c_str(), res.dump().size(), uWS::TEXT);
 	}
 }
-void server::msg::ch(server* sv, json j, uWS::WebSocket& s){
+void server::msg::ch(server* sv, json& j, uWS::WebSocket<uWS::SERVER> s){
 	auto res = json::array();
-	auto search = sv->clients.find(*(std::string *) s.getData());
+	auto search = sv->clients.find(*(std::string *) s.getUserData());
 	if(j["_id"].is_string() && search != sv->clients.end() && search->second.user->quota.room.can_spend()){
 		std::string nr = j["_id"].get<std::string>();
-		nlohmann::json set = {};
+		json set = {};
 		if(j["set"].is_object()) set = j["set"];
 		if(getUTF8strlen(nr) > 512) return;
 		jroom_clinfo_t info = sv->set_room(nr, s, search->second, set);
@@ -164,9 +161,9 @@ void server::msg::ch(server* sv, json j, uWS::WebSocket& s){
 
 
 
-void server::msg::hi(server* sv, json j, uWS::WebSocket& s){
+void server::msg::hi(server* sv, json& j, uWS::WebSocket<uWS::SERVER> s){
 	auto res = json::array();
-	auto search = sv->clients.find(*(std::string *) s.getData());
+	auto search = sv->clients.find(*(std::string *) s.getUserData());
 	if(search == sv->clients.end() || search->second.sockets.find(s) == search->second.sockets.end()){
 		res[0] = json::object({
 			{"m", "hi"},
@@ -179,8 +176,8 @@ void server::msg::hi(server* sv, json j, uWS::WebSocket& s){
 
 
 
-void server::msg::chown(server* sv, json j, uWS::WebSocket& s){
-	auto search = sv->clients.find(*(std::string *) s.getData());
+void server::msg::chown(server* sv, json& j, uWS::WebSocket<uWS::SERVER> s){
+	auto search = sv->clients.find(*(std::string *) s.getUserData());
 	if(search == sv->clients.end()) return;
 	auto ssearch = sv->rooms.find(search->second.sockets.at(s));
 	if(ssearch == sv->rooms.end()) return;
@@ -195,13 +192,13 @@ void server::msg::chown(server* sv, json j, uWS::WebSocket& s){
 		ssearch->second->set_owner(newowner);
 		json res = json::array();
 		res[0] = ssearch->second->get_json(ssearch->first, true);
-		uWS::WebSocket a;
+		uWS::WebSocket<uWS::SERVER> a;
 		ssearch->second->broadcast(res, a);
 	}
 }
 
-void server::msg::chset(server* sv, json j, uWS::WebSocket& s){
-	auto search = sv->clients.find(*(std::string *) s.getData());
+void server::msg::chset(server* sv, json& j, uWS::WebSocket<uWS::SERVER> s){
+	auto search = sv->clients.find(*(std::string *) s.getUserData());
 	if(search == sv->clients.end()) return;
 	if(!search->second.user->quota.room.can_spend()) return; /* ! */
 	auto ssearch = sv->rooms.find(search->second.sockets.at(s));
@@ -212,9 +209,9 @@ void server::msg::chset(server* sv, json j, uWS::WebSocket& s){
 	}
 }
 
-void server::msg::userset(server* sv, json j, uWS::WebSocket& s){
+void server::msg::userset(server* sv, json& j, uWS::WebSocket<uWS::SERVER> s){
 	if(j["set"].is_object() && j["set"]["name"].is_string()){
-		std::string ip = *(std::string *) s.getData();
+		std::string ip = *(std::string *) s.getUserData();
 		auto search = sv->clients.find(ip);
 		if(search != sv->clients.end() && search->second.user->quota.name.can_spend()){
 			std::string newn = j["set"]["name"].get<std::string>();
@@ -226,9 +223,9 @@ void server::msg::userset(server* sv, json j, uWS::WebSocket& s){
 	}
 }
 
-void server::msg::adminmsg(server* sv, json j, uWS::WebSocket& s){
+void server::msg::adminmsg(server* sv, json& j, uWS::WebSocket<uWS::SERVER> s){
 	if(j["password"].is_string() && sv->is_adminpw(j["password"].get<std::string>()) && j["message"].is_object()){
-		std::string ip(*(std::string *) s.getData());
+		std::string ip(*(std::string *) s.getUserData());
 		auto search = sv->clients.find(ip);
 		if(search == sv->clients.end()) return;
 		auto ssearch = sv->rooms.find(search->second.sockets.at(s));
@@ -248,31 +245,29 @@ void server::msg::adminmsg(server* sv, json j, uWS::WebSocket& s){
 					  catch(std::out_of_range) { return; }
 				}
 				selected->set_color(ncolor);
-				/* this is by far the ugliest workaround on this server, please kill me. */
-				clinfo_t* cl = ssearch->second->get_info(selected);
-				auto it = cl->sockets.begin();
-				uWS::WebSocket selsock = *it;
-				std::string selip(*(std::string *) selsock.getData());
-				auto selsrch = sv->clients.find(selip);
-				if(selsrch != sv->clients.end())
-					sv->user_upd(selsrch->second);
+				for(auto& client : sv->clients){
+					if(selected == client.second.user){
+						sv->user_upd(client.second);
+						break;
+					}
+				}
 			}
 		}
 	}
 }
 
-void server::msg::kickban(server* sv, json j, uWS::WebSocket& s){
+void server::msg::kickban(server* sv, json& j, uWS::WebSocket<uWS::SERVER> s){
 	return;
 }
 
 
 
-void server::msg::lsl(server* sv, json j, uWS::WebSocket& s){
+void server::msg::lsl(server* sv, json& j, uWS::WebSocket<uWS::SERVER> s){
 	sv->roomlist_watchers.erase(s);
 }
 
-void server::msg::lsp(server* sv, json j, uWS::WebSocket& s){
-	auto search = sv->clients.find(*(std::string *) s.getData());
+void server::msg::lsp(server* sv, json& j, uWS::WebSocket<uWS::SERVER> s){
+	auto search = sv->clients.find(*(std::string *) s.getUserData());
 	if(search == sv->clients.end()) return;
 	if(!search->second.user->quota.rmls.can_spend()) return;
 	json res = json::array();

@@ -1,11 +1,11 @@
 OBJS = server.cpp msg.cpp limiter.cpp database.cpp
-UWS = uWebSockets/src/Extensions.cpp uWebSockets/src/HTTPSocket.cpp uWebSockets/src/Network.cpp uWebSockets/src/Server.cpp uWebSockets/src/UTF8.cpp uWebSockets/src/WebSocket.cpp uWebSockets/src/EventSystem.cpp
+UWS = uWebSockets/src/Extensions.cpp uWebSockets/src/Group.cpp uWebSockets/src/WebSocketImpl.cpp uWebSockets/src/Networking.cpp uWebSockets/src/Hub.cpp uWebSockets/src/Node.cpp uWebSockets/src/WebSocket.cpp uWebSockets/src/HTTPSocket.cpp uWebSockets/src/Socket.cpp
 
 CC = g++
 
 COMPILER_FLAGS = -Wall -std=gnu++0x -O2
 
-LIBS = -I ./uWebSockets/src -luv -lcrypto -lssl -lz
+LIBS = -I ./uWebSockets/src -I ./json/src -luv -lcrypto -lssl -lz
 
 OBJ_NAME = out
 
