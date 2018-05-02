@@ -1,16 +1,25 @@
-OBJS = server.cpp msg.cpp limiter.cpp database.cpp
-UWS = uWebSockets/src/Extensions.cpp uWebSockets/src/Group.cpp uWebSockets/src/WebSocketImpl.cpp uWebSockets/src/Networking.cpp uWebSockets/src/Hub.cpp uWebSockets/src/Node.cpp uWebSockets/src/WebSocket.cpp uWebSockets/src/HTTPSocket.cpp uWebSockets/src/Socket.cpp
+OBJS    = $(wildcard *.cpp)
 
-CC = g++
+ALLOBJS = $(OBJS)
 
-COMPILER_FLAGS = -Wall -std=gnu++0x -O2
+COMPILER_FLAGS = -Wall -std=c++17 -O2
 
-LIBS = -I ./uWebSockets/src -I ./json/src -luv -lcrypto -lssl -lz
+LIBS = -I ./ -I ./lib/json/include/ -I ./lib/uWebSockets/src/ -L ./lib/uWebSockets/ -s -static -luWS -lssl -lz -lcrypto
 
-OBJ_NAME = out
+ifeq ($(OS),Windows_NT)
+	LIBS += -luv -lstdc++ -Wl,--whole-archive -lpthread -Wl,-Bdynamic,--no-whole-archive -lWs2_32 -lwsock32 -lGdi32 -lpsapi -liphlpapi -luserenv
+endif
 
-all : $(OBJS)
-	$(CC) $(OBJS) $(UWS) $(COMPILER_FLAGS) $(LIBS) -o $(OBJ_NAME)
+TARGET = out
 
-vanilla : $(OBJS)
-	$(CC) $(OBJS) $(UWS) $(COMPILER_FLAGS) -DVANILLA_SERVER $(LIBS) -o $(OBJ_NAME)
+all: uWS $(ALLOBJS)
+	$(CXX) $(ALLOBJS) $(COMPILER_FLAGS) $(LIBS) -o $(TARGET)
+
+vanilla: uWS $(ALLOBJS)
+	$(CXX) $(ALLOBJS) $(COMPILER_FLAGS) -DVANILLA_SERVER $(LIBS) -o $(TARGET)
+
+g: uWS $(ALLOBJS)
+	$(CXX) $(ALLOBJS) -Wall -std=gnu++0x -Og -g $(LIBS) -o $(TARGET)
+
+uWS:
+	$(MAKE) -C lib/uWebSockets -f ../uWebSockets.mk

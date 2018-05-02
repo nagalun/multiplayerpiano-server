@@ -1,6 +1,6 @@
-[submodule "json"]
-	path = json
-	url = https://github.com/nlohmann/json
 [submodule "uWebSockets"]
-	path = uWebSockets
+	path = lib/uWebSockets
 	url = https://github.com/uWebSockets/uWebSockets
+[submodule "json"]
+	path = lib/json
+	url = https://github.com/nlohmann/json

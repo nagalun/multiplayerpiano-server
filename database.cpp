@@ -1,4 +1,5 @@
 #include "server.hpp"
+#include <iostream>
 
 server::Database::pinfo_t server::Database::get_usrinfo(uint32_t hash){
 	server::Database::pinfo_t ret = {false, 0, {}};
