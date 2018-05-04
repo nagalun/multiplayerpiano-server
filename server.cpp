@@ -396,10 +396,11 @@ nlohmann::json server::genusr(uWS::WebSocket<uWS::SERVER> * s){
 }
 
 void server::run(){
-	if (!h.listen(port)) {
+	if (!h.listen("0.0.0.0", port)) {
 		std::cerr << "Can't listen to port: " << port << std::endl;
 		return;
 	}
+	std::cout << "Listening on 0.0.0.0:" << port << std::endl;
 	reg_evts(h);
 	h.run();
 }
