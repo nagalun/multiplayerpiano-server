@@ -1,0 +1,15 @@
+diff --git a/src/Networking.h b/src/Networking.h
+index e26888c..7f55618 100644
+--- a/src/Networking.h
++++ b/src/Networking.h
+@@ -23,7 +23,9 @@
+ #endif
+ 
+ #ifdef _WIN32
+-#define NOMINMAX
++#ifndef NOMINMAX
++	#define NOMINMAX
++#endif
+ #include <WinSock2.h>
+ #include <Ws2tcpip.h>
+ #pragma comment(lib, "ws2_32.lib")

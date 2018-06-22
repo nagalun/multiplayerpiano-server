@@ -1,6 +1,7 @@
 #include "server.hpp"
 #include <sstream>
 #include <iostream>
+#include <chrono>
 
 /* sha1 hashing */
 #include <openssl/sha.h>
@@ -40,11 +41,11 @@ std::string n2hexstr(uint32_t w, bool alpha = false) {
     return rc;
 }
 
-long int js_date_now(){
-	struct timeval tp;
-	gettimeofday(&tp, NULL);
-	long int ms = tp.tv_sec * 1000 + tp.tv_usec / 1000;
-	return ms;
+int64_t js_date_now(){
+	namespace c = std::chrono;
+	
+	auto time = c::system_clock::now().time_since_epoch();
+	return c::duration_cast<c::milliseconds>(time).count();
 }
 
 nlohmann::json server::Room::get_json(std::string _id, bool includeppl){

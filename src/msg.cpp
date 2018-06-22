@@ -4,7 +4,7 @@
 
 using nlohmann::json;
 
-long int js_date_now();
+int64_t js_date_now();
 std::string roundfloat(const float, int);
 size_t getUTF8strlen(const std::string&);
 
@@ -22,7 +22,7 @@ void server::msg::bin_n(server* sv, const char* msg, size_t len, uWS::WebSocket<
 			|| ssearch->second->is_owner(search->second.user))){
 			clinfo_t* usr = ssearch->second->get_info(search->second.user);
 			if(usr){
-				unsigned long int id = std::stoul(usr->id);
+				uint64_t id = std::stoull(usr->id);
 				char* newmsg = (char*)malloc(len + sizeof(id) + 1);
 				if(!newmsg){
 					std::cout << "Failed to allocate memory for bin note msg" << std::endl;
@@ -123,7 +123,7 @@ void server::msg::t(server* sv, json& j, uWS::WebSocket<uWS::SERVER> * s){
 		res[0] = {
 			{"m", "t"},
 			{"t", js_date_now()},
-			{"e", j["e"].get<long int>()}
+			{"e", j["e"].get<int64_t>()}
 		};
 		s->send((char *)res.dump().c_str(), res.dump().size(), uWS::TEXT);
 	}

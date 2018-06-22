@@ -1,25 +1,56 @@
-OBJS    = $(wildcard *.cpp)
+SRC_FILES = $(wildcard src/*.cpp)
+OBJ_FILES = $(SRC_FILES:src/%.cpp=build/%.o)
+DEP_FILES = $(OBJ_FILES:.o=.d)
 
-ALLOBJS = $(OBJS)
+TARGET    = out
 
-COMPILER_FLAGS = -Wall -std=c++17 -O2
+OPT_REL   = -O2
+LD_REL    = -s
+OPT_DBG   = -Og -g
 
-LIBS = -I ./ -I ./lib/json/include/ -I ./lib/uWebSockets/src/ -L ./lib/uWebSockets/ -s -static -luWS -lssl -lz -lcrypto
+CPPFLAGS += -std=c++11 -Wall -Wextra -Wno-unknown-pragmas -Wno-unused-parameter
+CPPFLAGS += -MMD -MP
+
+UWS       = ./lib/uWebSockets
+JSON      = ./lib/json
+LIB_FILES = $(UWS)/libuWS.a
+
+CPPFLAGS += -I ./src/
+CPPFLAGS += -I $(UWS)/src/
+CPPFLAGS += -I $(JSON)/include/
+LDFLAGS  += -L $(UWS)/
+
+LDLIBS   += -lssl -lz -lcrypto
 
 ifeq ($(OS),Windows_NT)
-	LIBS += -luv -lstdc++ -Wl,--whole-archive -lpthread -Wl,-Bdynamic,--no-whole-archive -lWs2_32 -lwsock32 -lGdi32 -lpsapi -liphlpapi -luserenv
+	LDLIBS += -luv -lWs2_32 -lpsapi -liphlpapi -luserenv
 endif
 
-TARGET = out
+.PHONY: all g clean clean-all
 
-all: uWS $(ALLOBJS)
-	$(CXX) $(ALLOBJS) $(COMPILER_FLAGS) $(LIBS) -o $(TARGET)
+all: CPPFLAGS += $(OPT_REL)
+all: LDFLAGS  += $(LD_REL)
+all: $(TARGET)
 
-vanilla: uWS $(ALLOBJS)
-	$(CXX) $(ALLOBJS) $(COMPILER_FLAGS) -DVANILLA_SERVER $(LIBS) -o $(TARGET)
+g: CPPFLAGS += $(OPT_DBG)
+g: LDFLAGS  += $(LD_DBG)
+g: $(TARGET)
 
-g: uWS $(ALLOBJS)
-	$(CXX) $(ALLOBJS) -Wall -std=gnu++0x -Og -g $(LIBS) -o $(TARGET)
+$(TARGET): $(OBJ_FILES) $(LIB_FILES)
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-uWS:
-	$(MAKE) -C lib/uWebSockets -f ../uWebSockets.mk
+build/%.o: src/%.cpp
+	$(CXX) $(CPPFLAGS) -c -o $@ $<
+
+
+$(UWS)/libuWS.a:
+	$(MAKE) -C $(UWS) -f ../uWebSockets.mk
+
+
+clean:
+	- $(RM) $(TARGET) $(OBJ_FILES) $(DEP_FILES)
+
+clean-all: clean
+	$(MAKE) -C $(UWS) -f ../uWebSockets.mk clean
+
+-include $(DEP_FILES)

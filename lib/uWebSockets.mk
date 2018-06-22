@@ -1,20 +1,24 @@
-CPPFILES = $(wildcard src/*.cpp)
-OBJFILES = $(CPPFILES:src/%.cpp=%.o)
-INCLUDES = -I src -lssl -lz -lcrypto
+SRC_FILES = $(wildcard src/*.cpp)
+OBJ_FILES = $(SRC_FILES:.cpp=.o)
+DEP_FILES = $(OBJ_FILES:.o=.d)
 
-ifeq ($(OS),Windows_NT)
-	INCLUDES += -luv -lWs2_32 -lwsock32 -lGdi32 -lpsapi -liphlpapi -luserenv
-endif
+CPPFLAGS += -std=c++11 -O3
+CPPFLAGS += -I ./src/
+CPPFLAGS += -MMD -MP
 
-LIB = libuWS.a
+TARGET    = libuWS.a
 
-CPP_STATIC := -std=c++11 -O3 $(INCLUDES) -c $(CPPFILES)
+.PHONY: all clean
 
-$(LIB):
-	$(CXX) $(CPPFLAGS) $(CFLAGS) $(CPP_STATIC) -s
-	ar rcs $(LIB) $(OBJFILES)
-	rm -f $(OBJFILES)
+all: $(TARGET)
+
+$(TARGET): $(OBJ_FILES)
+	$(AR) rcs $@ $^
+
+src/%.o: src/%.cpp
+	$(CXX) $(CPPFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(LIB)
-	rm -f $(OBJFILES)
+	- $(RM) $(TARGET) $(OBJ_FILES) $(DEP_FILES)
+
+-include $(DEP_FILES)
