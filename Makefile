@@ -24,6 +24,8 @@ LDLIBS   += -lssl -lz -lcrypto
 
 ifeq ($(OS),Windows_NT)
 	LDLIBS += -luv -lWs2_32 -lpsapi -liphlpapi -luserenv
+else
+	LDLIBS += -ldl -lpthread
 endif
 
 .PHONY: all g clean clean-all
