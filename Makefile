@@ -28,15 +28,18 @@ else
 	LDLIBS += -ldl -lpthread
 endif
 
-.PHONY: all g clean clean-all
+.PHONY: all g preconditions clean clean-all
 
 all: CPPFLAGS += $(OPT_REL)
 all: LDFLAGS  += $(LD_REL)
-all: $(TARGET)
+all: preconditions $(TARGET)
 
 g: CPPFLAGS += $(OPT_DBG)
 g: LDFLAGS  += $(LD_DBG)
-g: $(TARGET)
+g: preconditions $(TARGET)
+
+preconditions:
+	mkdir -p build
 
 $(TARGET): $(OBJ_FILES) $(LIB_FILES)
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LDLIBS)

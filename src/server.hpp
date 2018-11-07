@@ -11,6 +11,7 @@
 #include "limiter.hpp"
 #include "crossfuncs.hpp"
 
+uint32_t getDefaultRoomColor();
 
 /* Define VANILLA_SERVER if you don't want custom network messages, like non-JSON note data
  * #define VANILLA_SERVER
@@ -94,7 +95,7 @@ public:
 			visible(true),
 			chat(true),
 			crownsolo(false),
-			color(0xFF7F00),
+			color(getDefaultRoomColor()),
 			crown({NULL, NULL, {50, 50}, {50, 50}, 0}){};
 		nlohmann::json get_json(std::string, bool);
 		nlohmann::json get_chatlog_json();

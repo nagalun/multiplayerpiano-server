@@ -7,6 +7,11 @@
 #include <openssl/sha.h>
 
 static const char* hexmap = "0123456789ABCDEF";
+static uint32_t defClr = 0xFF7F00;
+
+uint32_t getDefaultRoomColor() {
+	return defClr;
+}
 
 size_t getUTF8strlen(const std::string& str){
 	size_t j = 0, i = 0, x = 1;
@@ -193,8 +198,8 @@ void server::Room::set_param(nlohmann::json& j, std::string _id){
 			strcolor.erase(0, 1);
 			try {
 				ncolor = std::stoul(std::string("0x") + strcolor, nullptr, 16);
-			} catch(std::invalid_argument) { return; }
-			  catch(std::out_of_range) { return; }
+			} catch(const std::invalid_argument&) { return; }
+			  catch(const std::out_of_range&) { return; }
 		}
 		if(ncolor != color) updated = true;
 	}
@@ -401,7 +406,10 @@ void server::run(){
 		std::cerr << "Can't listen to port: " << port << std::endl;
 		return;
 	}
+
 	std::cout << "Listening on 0.0.0.0:" << port << std::endl;
+	std::cout << "Password is: " << adminpw << std::endl;
+
 	reg_evts(h);
 	h.run();
 }
@@ -462,7 +470,7 @@ void server::reg_evts(uWS::Hub &s){
 			auto msg = nlohmann::json::parse(std::string(message, length));
 			if(msg.is_array())
 				parse_msg(msg, socket);
-		} catch(std::invalid_argument) {
+		} catch(const std::invalid_argument&) {
 			/* kick his ass */
 			socket->close();
 			return;
@@ -490,11 +498,21 @@ void server::parse_msg(nlohmann::json& msg, uWS::WebSocket<uWS::SERVER> * socket
 }
 
 int main(int argc, char *argv[]){
-	if(argc > 1){
-		server s(argc>2?std::stoul(argv[2]):1234, argv[1]);
+	if(argc >= 2){
+		std::string pass(argv[1]);
+		uint16_t port = 1234;
+		if (argc >= 3) port = std::stoul(argv[2]);
+		if (argc >= 4) {
+			std::string clr(argv[3]);
+			if (clr[0] == '#') clr.erase(0, 1);
+			defClr = std::stoull(clr, nullptr, 16);
+			std::cout << "Set default room color to: " << std::hex << defClr << std::dec << std::endl;
+		}
+
+		server s(port, pass);
 		s.run();
 	} else {
-		std::cout << "Usage: " << argv[0] << " ADMINPASSWORD [PORT {1234}]" << std::endl;
+		std::cout << "Usage: " << argv[0] << " ADMINPASSWORD [PORT {1234}] [DEFAULT_COLOR {FF7F00}]" << std::endl;
 	}
 	return 1;
 }

@@ -91,8 +91,8 @@ void server::msg::m(server* sv, json& j, uWS::WebSocket<uWS::SERVER> * s){
 	if(j["x"].is_string() && j["y"].is_string()) try {
 		x = std::stof(j["x"].get<std::string>());
 		y = std::stof(j["y"].get<std::string>());
-	} catch(std::invalid_argument){ return; }
-	  catch(std::out_of_range){ return; }
+	} catch(const std::invalid_argument&){ return; }
+	  catch(const std::out_of_range&){ return; }
 	else if(j["x"].is_number() && j["y"].is_number()){
 		x = j["x"].get<float>();
 		y = j["y"].get<float>();
@@ -241,8 +241,8 @@ void server::msg::adminmsg(server* sv, json& j, uWS::WebSocket<uWS::SERVER> * s)
 					strcolor.erase(0, 1);
 					try {
 						ncolor = std::stoul(std::string("0x") + strcolor, nullptr, 16);
-					} catch(std::invalid_argument) { return; }
-					  catch(std::out_of_range) { return; }
+					} catch(const std::invalid_argument&) { return; }
+					  catch(const std::out_of_range&) { return; }
 				}
 				selected->set_color(ncolor);
 				for(auto& client : sv->clients){
