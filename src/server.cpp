@@ -7,6 +7,11 @@
 /* sha1 hashing */
 #include <openssl/sha.h>
 
+#ifdef UWS_UDS
+#include <sys/types.h>
+#include <sys/stat.h>
+#endif
+
 static const char* hexmap = "0123456789ABCDEF";
 static uint32_t defClr = 0xFF7F00;
 
@@ -19,7 +24,7 @@ size_t getUTF8strlen(const std::string& str){
 	while (i < str.size()) {
 		if (x > 4) /* Invalid unicode */
 			return SIZE_MAX;
-		
+
 		if ((str[i] & 0xC0) != 0x80){
 			j += x == 4 ? 2 : 1;
 			x = 1;
@@ -31,6 +36,25 @@ size_t getUTF8strlen(const std::string& str){
 	if(x == 4)
 		j++;
 	return (j);
+}
+
+std::string getSocketIp(uS::Socket * s, uWS::HttpRequest req) {
+	auto addr = s->getAddress();
+	switch (addr.family[3]) {
+		case '6':
+		case '4':
+			return addr.address;
+			break;
+
+#ifdef UWS_UDS
+		case 'X': {
+			uWS::Header h = req.getHeader("x-real-ip", 9);
+			return h ? h.toString() : "";
+		} break;
+#endif
+	}
+
+	return "";
 }
 
 std::string roundfloat(const float x, int prec){
@@ -49,7 +73,7 @@ std::string n2hexstr(uint32_t w, bool alpha = false) {
 
 int64_t js_date_now(){
 	namespace c = std::chrono;
-	
+
 	auto time = c::system_clock::now().time_since_epoch();
 	return c::duration_cast<c::milliseconds>(time).count();
 }
@@ -108,6 +132,18 @@ nlohmann::json server::Room::get_json(std::string _id, bool includeppl){
 
 nlohmann::json server::Room::get_chatlog_json(){
 	nlohmann::json log = nlohmann::json::array();
+#ifdef FOR_OWOPP
+	log.push_back({
+		{"m", "a"},
+		{"a", "This is not the official MPP website. You can find the (better!) original at: http://multiplayerpiano.com/"},
+		{"p", {
+			{"name", "NOTE"},
+			{"color", "#AAAAAA"},
+			{"_id", "server ily_brandon_dont_c&d_thx[="}
+		}},
+		{"t", 0}
+	});
+#endif
 	for(auto& msg : chatlog){
 		log.push_back(msg);
 	}
@@ -319,7 +355,7 @@ jroom_clinfo_t server::set_room(std::string newroom, uWS::WebSocket<uWS::SERVER>
 	auto thissocket = m.sockets.find(s);
 	if(thissocket != m.sockets.end() && thissocket->second != newroom){
 		auto old = rooms.find(thissocket->second);
-		
+
 		if(old != rooms.end()){
 			bool isempty = old->second->kick_usr(s, m, old->first);
 			if(old->second->is_visible())
@@ -371,10 +407,11 @@ nlohmann::json server::genusr(uWS::WebSocket<uWS::SERVER> * s){
 	std::string ip = *(std::string *) s->getUserData();
 	auto search = clients.find(ip);
 	if(search == clients.end()){
+		std::string saltedip(ip + "cool salt");
 		unsigned char hash[20];
 		std::string _id(20, '0');
 		std::string name("Anonymoose");
-		SHA1((unsigned char*)ip.c_str(), ip.size(), hash);
+		SHA1((unsigned char*)saltedip.c_str(), saltedip.size(), hash);
 		for(uint8_t i = 10; i--;){
 			_id[2 * i] = hexmap[(hash[i] & 0xF0) >> 4];
 			_id[2 * i + 1] = hexmap[hash[i] & 0x0F];
@@ -383,7 +420,7 @@ nlohmann::json server::genusr(uWS::WebSocket<uWS::SERVER> * s){
 		                 (uint32_t)hash[12] << 16 |
 		                 (uint16_t)hash[13] << 8 |
 		                           hash[14];
-		
+
 		uint32_t dhash = (uint32_t)hash[15] << 24 |
 		                 (uint32_t)hash[16] << 16 |
 		                 (uint16_t)hash[17] << 8 |
@@ -403,12 +440,18 @@ nlohmann::json server::genusr(uWS::WebSocket<uWS::SERVER> * s){
 }
 
 void server::run(){
-	if (!h.listen("0.0.0.0", port)) {
-		std::cerr << "Can't listen to port: " << port << std::endl;
+#ifdef UWS_UDS
+	auto m = umask(7);
+#endif
+	if (!h.listen(path.c_str(), port)) {
+		std::cerr << "Can't listen on:" << path << ":" << port << std::endl;
 		return;
 	}
+#ifdef UWS_UDS
+	umask(m);
+#endif
 
-	std::cout << "Listening on 0.0.0.0:" << port << std::endl;
+	std::cout << "Listening on " << path << ":" << port << std::endl;
 	std::cout << "Password is: " << adminpw << std::endl;
 
 	reg_evts(h);
@@ -417,9 +460,9 @@ void server::run(){
 
 void server::reg_evts(uWS::Hub &s){
 	s.onConnection([this](uWS::WebSocket<uWS::SERVER> * socket, uWS::HttpRequest req){
-		socket->setUserData(new std::string(socket->getAddress().address));
+		socket->setUserData(new std::string(getSocketIp(socket, req)));
 	});
-	
+
 	s.onDisconnection([this](uWS::WebSocket<uWS::SERVER> * socket, int c, const char *message, size_t length){
 		std::string ip = *(std::string *) socket->getUserData();
 		roomlist_watchers.erase(socket);
@@ -428,7 +471,11 @@ void server::reg_evts(uWS::Hub &s){
 			auto ssearch = search->second.sockets.find(socket);
 			if(ssearch != search->second.sockets.end()){
 				auto tsearch = rooms.find(ssearch->second);
-				if(tsearch != rooms.end() && tsearch->second->kick_usr(socket, search->second, tsearch->first)){
+				if(tsearch != rooms.end() && tsearch->second->kick_usr(socket, search->second, tsearch->first)
+#ifdef FOR_OWOPP
+						&& tsearch->first != "lobby"
+#endif
+						){
 					std::cout << "Deleted room: " << tsearch->first << std::endl;
 					delete tsearch->second;
 					rooms.erase(tsearch);
@@ -448,12 +495,8 @@ void server::reg_evts(uWS::Hub &s){
 		}
 		delete (std::string *) socket->getUserData();
 	});
-	
+
 	s.onMessage([this](uWS::WebSocket<uWS::SERVER> * socket, const char *message, size_t length, uWS::OpCode opCode){
-		if(length > 16384){
-			socket->close();
-			return;
-		}
 #ifndef VANILLA_SERVER
 		if(opCode == uWS::BINARY && length > 1){
 			switch((uint8_t)message[0]){
@@ -465,13 +508,13 @@ void server::reg_evts(uWS::Hub &s){
 					return;
 					break;
 			}
-		} else 
+		} else
 #endif
 		if(opCode == uWS::TEXT) try {
 			auto msg = nlohmann::json::parse(std::string(message, length));
 			if(msg.is_array())
 				parse_msg(msg, socket);
-		} catch(const std::invalid_argument&) {
+		} catch(const nlohmann::json::parse_error&) {
 			/* kick his ass */
 			socket->close();
 			return;
@@ -480,13 +523,15 @@ void server::reg_evts(uWS::Hub &s){
 			return;
 		}
 	});
+
+	h.getDefaultGroup<uWS::SERVER>().startAutoPing(30000);
 }
 
 void server::parse_msg(nlohmann::json& msg, uWS::WebSocket<uWS::SERVER> * socket){
 	for(auto& m : msg){
 		if(m["m"].is_string()){
 			/* we don't want to continue reading messages if the client said bye */
-			if(m["m"].get<std::string>() == "bye"){ 
+			if(m["m"].get<std::string>() == "bye"){
 				socket->close();
 				break;
 			}
@@ -502,6 +547,7 @@ int main(int argc, char *argv[]){
 	if(argc >= 2){
 		std::string pass(argv[1]);
 		uint16_t port = 1234;
+		std::string addr("0.0.0.0");
 		if (argc >= 3) port = std::stoul(argv[2]);
 		if (argc >= 4) {
 			std::string clr(argv[3]);
@@ -509,11 +555,13 @@ int main(int argc, char *argv[]){
 			defClr = std::stoull(clr, nullptr, 16);
 			std::cout << "Set default room color to: " << std::hex << defClr << std::dec << std::endl;
 		}
+		if (argc >= 5) addr = argv[4];
 
-		server s(port, pass);
+		server s(addr, port, pass);
 		s.run();
 	} else {
-		std::cout << "Usage: " << argv[0] << " ADMINPASSWORD [PORT {1234}] [DEFAULT_COLOR {FF7F00}]" << std::endl;
+		std::cout << "Usage: " << argv[0] << " ADMINPASSWORD [PORT {1234}] [DEFAULT_COLOR {FF7F00}] [LISTEN_ADDR]" << std::endl;
 	}
+
 	return 1;
 }

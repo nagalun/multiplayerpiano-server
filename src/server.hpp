@@ -126,20 +126,20 @@ public:
 		static void m(server*, nlohmann::json&, uWS::WebSocket<uWS::SERVER> *);
 		static void t(server*, nlohmann::json&, uWS::WebSocket<uWS::SERVER> *);
 		static void ch(server*, nlohmann::json&, uWS::WebSocket<uWS::SERVER> *);
-		
+
 		static void hi(server*, nlohmann::json&, uWS::WebSocket<uWS::SERVER> *);
-		
+
 		static void chown(server*, nlohmann::json&, uWS::WebSocket<uWS::SERVER> *);
 		static void chset(server*, nlohmann::json&, uWS::WebSocket<uWS::SERVER> *);
 		static void userset(server*, nlohmann::json&, uWS::WebSocket<uWS::SERVER> *);
-		
+
 		static void adminmsg(server*, nlohmann::json&, uWS::WebSocket<uWS::SERVER> *);
 		static void kickban(server*, nlohmann::json&, uWS::WebSocket<uWS::SERVER> *);
-		
+
 		static void lsl(server*, nlohmann::json&, uWS::WebSocket<uWS::SERVER> *); /* -ls */
 		static void lsp(server*, nlohmann::json&, uWS::WebSocket<uWS::SERVER> *); /* +ls */
 	};
-	server(uint16_t p, const std::string& pw) : port(p), h(uWS::NO_DELAY | uWS::PERMESSAGE_DEFLATE, true), db("database/"), adminpw(pw){
+	server(std::string path, uint16_t p, const std::string& pw) : path(path), port(p), h(uWS::NO_DELAY, true, 16384), db("database/"), adminpw(pw){
 		funcmap = {
 			{"n", std::bind(msg::n, this, std::placeholders::_1, std::placeholders::_2)},
 			{"a", std::bind(msg::a, this, std::placeholders::_1, std::placeholders::_2)},
@@ -166,6 +166,7 @@ public:
 	nlohmann::json genusr(uWS::WebSocket<uWS::SERVER> *);
 	bool is_adminpw(const std::string p){return p == adminpw;};
 private:
+	std::string path;
 	uint16_t port;
 	uWS::Hub h;
 	server::Database db;

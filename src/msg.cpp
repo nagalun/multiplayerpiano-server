@@ -141,7 +141,7 @@ void server::msg::ch(server* sv, json& j, uWS::WebSocket<uWS::SERVER> * s){
 		Room* room = sv->rooms.at(nr);
 		if(!room) return;
 		res[0] = room->get_json(nr, true);
-		
+
 		/*room->broadcast(res, s); this can be changed for the following, less data sent. */
 		if(info.newclient){
 			json upd = json::array();
@@ -150,7 +150,7 @@ void server::msg::ch(server* sv, json& j, uWS::WebSocket<uWS::SERVER> * s){
 			upd[0]["m"] = "p";
 			room->broadcast(upd, s);
 		}
-		
+
 		res[0]["p"] = info.id;
 		res[1] = {
 			{"m", "c"},
@@ -210,13 +210,34 @@ void server::msg::chset(server* sv, json& j, uWS::WebSocket<uWS::SERVER> * s){
 }
 
 void server::msg::userset(server* sv, json& j, uWS::WebSocket<uWS::SERVER> * s){
-	if(j["set"].is_object() && j["set"]["name"].is_string()){
+	if(j["set"].is_object()){
 		std::string ip = *(std::string *) s->getUserData();
 		auto search = sv->clients.find(ip);
 		if(search != sv->clients.end() && search->second.user->quota.name.can_spend()){
-			std::string newn = j["set"]["name"].get<std::string>();
-			if(getUTF8strlen(newn) <= 40){
-				search->second.user->set_name(newn);
+			bool updated = false;
+
+			if (j["set"]["name"].is_string()) {
+				std::string newn = j["set"]["name"].get<std::string>();
+				if(getUTF8strlen(newn) <= 40){
+					search->second.user->set_name(newn);
+					updated = true;
+				}
+			}
+
+			if (j["set"]["color"].is_string()) {
+				std::string newc = j["set"]["color"].get<std::string>();
+				if (newc.size() > 1 && newc[0] == '#') {
+					newc.erase(0, 1);
+					try {
+						uint32_t ncolor = std::stoul(std::string("0x") + newc, nullptr, 16);
+						search->second.user->set_color(ncolor);
+						updated = true;
+					} catch(const std::invalid_argument&) { }
+					  catch(const std::out_of_range&) { }
+				}
+			}
+
+			if (updated) {
 				sv->user_upd(search->second);
 			}
 		}

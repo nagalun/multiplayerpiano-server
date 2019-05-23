@@ -1,0 +1,115 @@
+diff --git a/src/Networking.h b/src/Networking.h
+index e26888c..d0364a2 100644
+--- a/src/Networking.h
++++ b/src/Networking.h
+@@ -55,12 +55,15 @@ inline SOCKET dup(SOCKET socket) {
+ }
+ #else
+ #include <sys/socket.h>
++#include <sys/un.h>
+ #include <netinet/in.h>
+ #include <netinet/tcp.h>
+ #include <netdb.h>
+ #include <unistd.h>
+ #include <arpa/inet.h>
+ #include <cstring>
++// Unix Domain Sockets support
++#define UWS_UDS
+ #define SOCKET_ERROR -1
+ #define INVALID_SOCKET -1
+ #define WIN32_EXPORT
+diff --git a/src/Node.h b/src/Node.h
+index 5c31caf..8c7649a 100644
+--- a/src/Node.h
++++ b/src/Node.h
+@@ -128,37 +128,55 @@ public:
+     // todo: hostname, backlog
+     template <void A(Socket *s)>
+     bool listen(const char *host, int port, uS::TLS::Context sslContext, int options, uS::NodeData *nodeData, void *user) {
+-        addrinfo hints, *result;
++        uv_os_sock_t listenFd = SOCKET_ERROR;
++        Context *netContext = nodeData->netContext;
++
++        addrinfo hints, *result = nullptr;
++        addrinfo *listenAddr;
++
+         memset(&hints, 0, sizeof(addrinfo));
+ 
+         hints.ai_flags = AI_PASSIVE;
+         hints.ai_family = AF_UNSPEC;
+         hints.ai_socktype = SOCK_STREAM;
+ 
+-        Context *netContext = nodeData->netContext;
++#ifdef UWS_UDS
++        sockaddr_un unixsv;
++        if (host && strncmp(host, "unix:", 5) == 0) {
++            listenFd = netContext->createSocket(AF_UNIX, hints.ai_socktype, hints.ai_protocol);
+ 
+-        if (getaddrinfo(host, std::to_string(port).c_str(), &hints, &result)) {
+-            return true;
+-        }
++            unixsv.sun_family = AF_UNIX;
++            strncpy(unixsv.sun_path, host + 5, strlen(host + 5) + 1);
++
++            hints.ai_addr = (sockaddr *) &unixsv;
++            hints.ai_addrlen = sizeof(unixsv);
++            listenAddr = &hints;
++
++            unlink(unixsv.sun_path);
++        } else
++#endif
++        {
++            if (getaddrinfo(host, std::to_string(port).c_str(), &hints, &result)) {
++                return true;
++            }
++
++            if ((options & uS::ONLY_IPV4) == 0) {
++                for (addrinfo *a = result; a && listenFd == SOCKET_ERROR; a = a->ai_next) {
++                    if (a->ai_family == AF_INET6) {
++                        listenFd = netContext->createSocket(a->ai_family, a->ai_socktype, a->ai_protocol);
++                        listenAddr = a;
++                    }
++                }
++            }
+ 
+-        uv_os_sock_t listenFd = SOCKET_ERROR;
+-        addrinfo *listenAddr;
+-        if ((options & uS::ONLY_IPV4) == 0) {
+             for (addrinfo *a = result; a && listenFd == SOCKET_ERROR; a = a->ai_next) {
+-                if (a->ai_family == AF_INET6) {
++                if (a->ai_family == AF_INET) {
+                     listenFd = netContext->createSocket(a->ai_family, a->ai_socktype, a->ai_protocol);
+                     listenAddr = a;
+                 }
+             }
+         }
+ 
+-        for (addrinfo *a = result; a && listenFd == SOCKET_ERROR; a = a->ai_next) {
+-            if (a->ai_family == AF_INET) {
+-                listenFd = netContext->createSocket(a->ai_family, a->ai_socktype, a->ai_protocol);
+-                listenAddr = a;
+-            }
+-        }
+-
+         if (listenFd == SOCKET_ERROR) {
+             freeaddrinfo(result);
+             return true;
+diff --git a/src/Socket.cpp b/src/Socket.cpp
+index c35bbf8..bf0ac35 100644
+--- a/src/Socket.cpp
++++ b/src/Socket.cpp
+@@ -18,10 +18,13 @@ Socket::Address Socket::getAddress()
+         sockaddr_in *ipv4 = (sockaddr_in *) &addr;
+         inet_ntop(AF_INET, &ipv4->sin_addr, buf, sizeof(buf));
+         return {ntohs(ipv4->sin_port), buf, "IPv4"};
+-    } else {
++    } else if (addr.ss_family == AF_INET6) {
+         sockaddr_in6 *ipv6 = (sockaddr_in6 *) &addr;
+         inet_ntop(AF_INET6, &ipv6->sin6_addr, buf, sizeof(buf));
+         return {ntohs(ipv6->sin6_port), buf, "IPv6"};
++    } else {
++    	//sockaddr_un *unix = (sockaddr_un *) &addr;
++    	return {0, "", "UNIX"};
+     }
+ }
+ 

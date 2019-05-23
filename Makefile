@@ -34,6 +34,10 @@ all: CPPFLAGS += $(OPT_REL)
 all: LDFLAGS  += $(LD_REL)
 all: preconditions $(TARGET)
 
+owopp: CPPFLAGS += $(OPT_REL) -D FOR_OWOPP
+owopp: LDFLAGS  += $(LD_REL)
+owopp: preconditions $(TARGET)
+
 g: CPPFLAGS += $(OPT_DBG)
 g: LDFLAGS  += $(LD_DBG)
 g: preconditions $(TARGET)
