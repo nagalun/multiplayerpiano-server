@@ -530,12 +530,21 @@ void server::reg_evts(uWS::Hub &s){
 void server::parse_msg(nlohmann::json& msg, uWS::WebSocket<uWS::SERVER> * socket){
 	for(auto& m : msg){
 		if(m["m"].is_string()){
+			std::string currmsg(m["m"].get<std::string>());
 			/* we don't want to continue reading messages if the client said bye */
-			if(m["m"].get<std::string>() == "bye"){
+			if(currmsg == "bye"){
 				socket->close();
 				break;
 			}
-			auto str = funcmap.find(m["m"].get<std::string>());
+
+			auto clsearch = clients.find(*(std::string *) socket->getUserData());
+			if((clsearch == clients.end() || clsearch->second.sockets.find(socket) == clsearch->second.sockets.end())
+					&& currmsg != "hi") {
+				socket->close();
+				break;
+			}
+
+			auto str = funcmap.find(currmsg);
 			if(str != funcmap.end()){
 				str->second(m, socket);
 			}
