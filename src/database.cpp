@@ -1,9 +1,10 @@
 #include "server.hpp"
 #include <iostream>
+#include <string>
 
-server::Database::pinfo_t server::Database::get_usrinfo(uint32_t hash){
+server::Database::pinfo_t server::Database::get_usrinfo(std::string hash){
 	server::Database::pinfo_t ret = {false, 0, {}};
-	std::fstream file(std::string(dir + std::to_string(hash)), std::fstream::in | std::fstream::out | std::fstream::binary);
+	std::fstream file(std::string(dir + hash), std::fstream::in | std::fstream::out | std::fstream::binary);
 	if(!file) return ret;
 	std::streampos old = file.tellg();
 	file.seekg(0, std::fstream::end);
@@ -18,8 +19,8 @@ server::Database::pinfo_t server::Database::get_usrinfo(uint32_t hash){
 	return ret;
 }
 
-void server::Database::set_usrinfo(uint32_t hash, pinfo_t usr){
-	std::fstream file(std::string(dir + std::to_string(hash)), std::fstream::in | std::fstream::out | std::fstream::binary | std::fstream::trunc);
+void server::Database::set_usrinfo(std::string hash, pinfo_t usr){
+	std::fstream file(std::string(dir + hash), std::fstream::in | std::fstream::out | std::fstream::binary | std::fstream::trunc);
 	if(!file){
 		std::cout << "Could not create file!" << std::endl;
 		return;

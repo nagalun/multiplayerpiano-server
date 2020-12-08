@@ -49,8 +49,8 @@ public:
 		Database(const std::string& dir) : dir(dir){
 			makedir(dir);
 		};
-		pinfo_t get_usrinfo(uint32_t);
-		void set_usrinfo(uint32_t, pinfo_t);
+		pinfo_t get_usrinfo(std::string);
+		void set_usrinfo(std::string, pinfo_t);
 	};
 	struct mppconn_t {
 		Client* user;
@@ -62,18 +62,18 @@ public:
 		std::string name;
 		std::string _id;
 	public:
-		Client(uint32_t hsh, std::string n_id, uint32_t clr, std::string nme) :
+		Client(std::string filen, std::string n_id, uint32_t clr, std::string nme) :
 			color(clr),
 			name(nme),
 			_id(n_id),
-			dhash(hsh),
+			filen(filen),
 			changed(false){};
 		nlohmann::json get_json();
 		Database::pinfo_t get_dbdata();
 		void set_name(std::string n){name=n;};
 		void set_color(uint32_t c){color=c;};
 		ClientLimit quota;
-		uint32_t dhash;
+		std::string filen;
 		bool changed;
 	};
 	class Room {

@@ -410,29 +410,31 @@ nlohmann::json server::genusr(uWS::WebSocket<uWS::SERVER> * s){
 		std::string saltedip(ip + "cool salt");
 		unsigned char hash[20];
 		std::string _id(20, '0');
+		std::string filen(40, '0');
 		std::string name("Anonymoose");
 		SHA1((unsigned char*)saltedip.c_str(), saltedip.size(), hash);
-		for(uint8_t i = 10; i--;){
+		for(uint8_t i = 0; i < 10; i++){
 			_id[2 * i] = hexmap[(hash[i] & 0xF0) >> 4];
 			_id[2 * i + 1] = hexmap[hash[i] & 0x0F];
 		}
-		uint32_t color = (uint32_t)hash[11] << 24 |
-		                 (uint32_t)hash[12] << 16 |
-		                 (uint16_t)hash[13] << 8 |
-		                           hash[14];
 
-		uint32_t dhash = (uint32_t)hash[15] << 24 |
-		                 (uint32_t)hash[16] << 16 |
-		                 (uint16_t)hash[17] << 8 |
-		                           hash[18];
-		server::Database::pinfo_t dbusr = db.get_usrinfo(dhash);
+		for(uint8_t i = 0; i < 20; i++){
+			filen[2 * i] = hexmap[(hash[i] & 0xF0) >> 4];
+			filen[2 * i + 1] = hexmap[hash[i] & 0x0F];
+		}
+
+		uint32_t color = (uint32_t)hash[0] << 24 |
+		                 (uint32_t)hash[1] << 16 |
+		                 (uint16_t)hash[2] << 8 |
+		                           hash[3];
+
+		server::Database::pinfo_t dbusr = db.get_usrinfo(filen);
 		if(dbusr.found){
-			std::cout << "User found in database." << std::endl;
 			color = dbusr.color;
 			name = dbusr.name;
 		}
-		std::cout << "New client: " << ip << std::endl;
-		clients[ip] = {new server::Client(dhash, _id, color, name), {{s, ""}}};
+		std::cout << "New client(" << (dbusr.found ? 'd' : 'n') << "): " << ip << std::endl;
+		clients[ip] = {new server::Client(filen, _id, color, name), {{s, ""}}};
 	} else {
 		search->second.sockets.emplace(s, "");
 	}
@@ -485,7 +487,7 @@ void server::reg_evts(uWS::Hub &s){
 			if(!search->second.sockets.size()){
 				if(search->second.user->changed){
 					std::cout << "Saving client." << std::endl;
-					db.set_usrinfo(search->second.user->dhash,
+					db.set_usrinfo(search->second.user->filen,
 						       search->second.user->get_dbdata());
 				}
 				std::cout << "Deleted client: " << ip << std::endl;
