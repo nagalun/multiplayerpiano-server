@@ -516,7 +516,7 @@ void server::reg_evts(uWS::Hub &s){
 			auto msg = nlohmann::json::parse(std::string(message, length));
 			if(msg.is_array())
 				parse_msg(msg, socket);
-		} catch(const nlohmann::json::parse_error&) {
+		} catch(...) { /* just catch everything */
 			/* kick his ass */
 			socket->close();
 			return;
@@ -531,7 +531,7 @@ void server::reg_evts(uWS::Hub &s){
 
 void server::parse_msg(nlohmann::json& msg, uWS::WebSocket<uWS::SERVER> * socket){
 	for(auto& m : msg){
-		if(m["m"].is_string()){
+		if(m.is_object() && m["m"].is_string()){
 			std::string currmsg(m["m"].get<std::string>());
 			/* we don't want to continue reading messages if the client said bye */
 			if(currmsg == "bye"){
